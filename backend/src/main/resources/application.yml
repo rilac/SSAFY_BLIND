@@ -1,0 +1,24 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:community
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+
+# 환경변수 우선 참조, 없으면 기본값 사용 (끝 슬래시 제거)
+mattermost:
+  base-url: ${MM_BASE_URL:https://meeting.ssafy.com}
+
+jwt:
+  secret: ${JWT_SECRET:DefaultDevSecretKeyThatIsAtLeast256Bits!!}
