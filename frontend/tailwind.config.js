@@ -41,8 +41,10 @@ export default {
         },
       },
       fontFamily: {
-        mono: ['JetBrains Mono', 'monospace'],
-        sans: ['Work Sans', 'sans-serif'],
+        // §4: 앱 전반이 한글 텍스트에도 font-mono를 쓰므로, 라틴은 JetBrains Mono(브루탈리즘)로
+        // 두되 한글 글리프는 Pretendard로 폴백시켜 Windows 가독성("딱딱함")을 개선한다.
+        mono: ['JetBrains Mono', 'Pretendard Variable', 'Pretendard', 'monospace'],
+        sans: ['Pretendard Variable', 'Pretendard', 'Work Sans', 'Apple SD Gothic Neo', 'sans-serif'],
       },
     },
   },

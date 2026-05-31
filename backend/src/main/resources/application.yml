@@ -10,8 +10,40 @@ mattermost:
 jwt:
   secret: ${JWT_SECRET}
 
+# 운영 튜닝 파라미터 — 환경변수로 override 가능
+app:
+  # M-NEW-2: CORS 허용 오리진(콤마 구분). 운영은 APP_CORS_ALLOWED_ORIGINS로 실제 도메인 지정 필수.
+  cors:
+    allowed-origins: ${APP_CORS_ALLOWED_ORIGINS:http://localhost:5173}
+  # C-NEW-2: 로그인 레이트리밋(IP/loginId 단위 — window 내 max-attempts 초과 시 block-seconds 차단)
+  login-rate-limit:
+    max-attempts: ${LOGIN_RATE_MAX_ATTEMPTS:5}
+    window-seconds: ${LOGIN_RATE_WINDOW_SECONDS:300}
+    block-seconds: ${LOGIN_RATE_BLOCK_SECONDS:600}
+  # H-NEW-3: Mattermost 호출 타임아웃(ms)
+  mattermost:
+    connect-timeout-ms: ${MM_CONNECT_TIMEOUT_MS:3000}
+    read-timeout-ms: ${MM_READ_TIMEOUT_MS:5000}
+  # M-NEW-6: 최초 관리자 부트스트랩 — 콤마 구분 MM username. 로그인 시 ADMIN으로 승격(미설정 시 비활성).
+  admin:
+    bootstrap-usernames: ${APP_ADMIN_BOOTSTRAP_USERNAMES:}
+
+# 관측성 — Actuator. 기본은 health만 웹 노출(민감 엔드포인트 비노출). 헬스 상세는 인증 시에만.
+# health는 SecurityConfig에서 permitAll(LB/오케스트레이터 헬스체크용), 그 외는 인증 필요.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true # liveness/readiness 프로브
+
 logging:
   level:
     com.company.community: DEBUG
   pattern:
-    console: "%d{yyyy-MM-dd HH:mm:ss} [%level] %logger{36} - %msg%n"
+    # [%X{requestId}] — RequestIdFilter가 넣는 요청 상관관계 ID(없으면 공백)
+    console: "%d{yyyy-MM-dd HH:mm:ss} [%level] [%X{requestId:-}] %logger{36} - %msg%n"

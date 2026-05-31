@@ -19,4 +19,10 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Modifying
     @Query("UPDATE Notification n SET n.isRead = true WHERE n.recipient.id = :userId AND n.isRead = false")
     void markAllRead(@Param("userId") Long userId);
+
+    // C-NEW-1: 게시글 삭제 시 해당 글을 가리키는 알림 정리(고아 알림 방지).
+    // Notification.postId는 FK가 아닌 단순 Long이라 삭제를 막지는 않으나, 죽은 링크가 남는다.
+    @Modifying
+    @Query("DELETE FROM Notification n WHERE n.postId = :postId")
+    void deleteByPostId(@Param("postId") Long postId);
 }

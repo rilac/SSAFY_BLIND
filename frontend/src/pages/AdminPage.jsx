@@ -4,6 +4,8 @@ import { ArrowLeft, Eye, Trash2, RotateCcw, Shield } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatTimestamp } from '../lib/format';
+import AlertDialog from '../components/AlertDialog';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const REASON_LABELS = {
   GAMBLING_OR_ADULT: '사행성·선정성',
@@ -20,6 +22,9 @@ export default function AdminPage() {
   const [reported, setReported] = useState([]);
   const [feedback, setFeedback] = useState([]);
   const [loading, setLoading] = useState(true);
+  // 커스텀 모달(M-NEW-4): 네이티브 alert/confirm 대체
+  const [notice, setNotice] = useState(null); // { title?, message }
+  const [confirmState, setConfirmState] = useState(null); // { ...props, onConfirm }
 
   useEffect(() => {
     if (!user) return;
@@ -27,19 +32,24 @@ export default function AdminPage() {
       navigate('/feed', { replace: true });
       return;
     }
+    // 신고 목록과 건의함을 독립적으로 처리한다(allSettled).
+    // 한쪽 요청이 실패해도(예: 신고-게시글 데이터 정합 이슈) 다른 쪽은 정상 표시.
     const fetchAll = async () => {
-      try {
-        const [r, f] = await Promise.all([
-          api.get('/admin/posts/reported'),
-          api.get('/admin/feedback'),
-        ]);
-        setReported(r.data);
-        setFeedback(f.data);
-      } catch (e) {
-        console.error('관리자 데이터 조회 실패', e);
-      } finally {
-        setLoading(false);
+      const [reportedResult, feedbackResult] = await Promise.allSettled([
+        api.get('/admin/posts/reported'),
+        api.get('/admin/feedback'),
+      ]);
+      if (reportedResult.status === 'fulfilled') {
+        setReported(reportedResult.value.data);
+      } else {
+        console.error('신고 게시물 조회 실패', reportedResult.reason);
       }
+      if (feedbackResult.status === 'fulfilled') {
+        setFeedback(feedbackResult.value.data);
+      } else {
+        console.error('건의함 조회 실패', feedbackResult.reason);
+      }
+      setLoading(false);
     };
     fetchAll();
   }, [user, navigate]);
@@ -47,20 +57,39 @@ export default function AdminPage() {
   const handleRestore = async (id) => {
     try {
       await api.post(`/admin/posts/${id}/restore`);
-      setReported((prev) => prev.map((p) => (p.postId === id ? { ...p, hidden: false } : p)));
+      // 복원 시 백엔드가 reviewed=true로 표시(재자동숨김 제외) — 로컬 상태도 함께 반영
+      setReported((prev) =>
+        prev.map((p) => (p.postId === id ? { ...p, hidden: false, reviewed: true } : p))
+      );
     } catch {
-      alert('복원에 실패했습니다.');
+      setNotice({ title: '복원 실패', message: '복원에 실패했습니다.' });
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('이 게시글을 영구 삭제하시겠습니까?')) return;
+  const requestDelete = (id) => {
+    setConfirmState({
+      title: '영구 삭제',
+      message: '이 게시글을 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.',
+      confirmLabel: '삭제',
+      danger: true,
+      onConfirm: () => performDelete(id),
+    });
+  };
+
+  const performDelete = async (id) => {
     try {
       await api.delete(`/posts/${id}`);
       setReported((prev) => prev.filter((p) => p.postId !== id));
     } catch {
-      alert('삭제에 실패했습니다.');
+      setNotice({ title: '삭제 실패', message: '삭제에 실패했습니다.' });
     }
+  };
+
+  // 확인 모달 '확인' 클릭 — 모달을 닫고 저장된 액션 실행
+  const handleConfirm = () => {
+    const fn = confirmState?.onConfirm;
+    setConfirmState(null);
+    fn?.();
   };
 
   return (
@@ -96,11 +125,15 @@ export default function AdminPage() {
                     <div key={p.postId} className="border border-border bg-card p-5">
                       <div className="flex items-start justify-between gap-4 mb-2">
                         <h3 className="text-base font-semibold flex-1">{p.title}</h3>
-                        {p.hidden && (
+                        {p.hidden ? (
                           <span className="text-[10px] font-mono px-2 py-1 border border-destructive text-destructive shrink-0">
                             숨김
                           </span>
-                        )}
+                        ) : p.reviewed ? (
+                          <span className="text-[10px] font-mono px-2 py-1 border border-primary text-primary shrink-0">
+                            검토완료
+                          </span>
+                        ) : null}
                       </div>
                       <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground mb-3 flex-wrap">
                         <span className="text-destructive">신고 {p.reportCount}건</span>
@@ -130,7 +163,7 @@ export default function AdminPage() {
                           </button>
                         )}
                         <button
-                          onClick={() => handleDelete(p.postId)}
+                          onClick={() => requestDelete(p.postId)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity"
                         >
                           <Trash2 size={12} />
@@ -168,6 +201,22 @@ export default function AdminPage() {
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        open={!!confirmState}
+        title={confirmState?.title}
+        message={confirmState?.message}
+        confirmLabel={confirmState?.confirmLabel}
+        danger={confirmState?.danger}
+        onConfirm={handleConfirm}
+        onClose={() => setConfirmState(null)}
+      />
+      <AlertDialog
+        open={!!notice}
+        title={notice?.title}
+        message={notice?.message}
+        onClose={() => setNotice(null)}
+      />
     </div>
   );
 }

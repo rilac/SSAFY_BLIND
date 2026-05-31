@@ -94,6 +94,21 @@ class ReportServiceTest {
         assertThat(post.isHidden()).isFalse();
     }
 
+    @Test
+    @DisplayName("관리자가 복원(검수 완료)한 글은 신고가 임계값을 넘어도 재자동숨김되지 않는다 (§1-1)")
+    void test_복원글_재숨김_방지() {
+        post.restore(); // 복원 → reviewed=true
+        given(postRepository.findById(10L)).willReturn(Optional.of(post));
+        given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(false);
+        given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
+
+        reportService.report(1L, 10L, ReportReason.OFF_TOPIC);
+
+        // reviewed 글은 임계값 카운트 쿼리 자체를 건너뛰고 숨김되지 않는다
+        assertThat(post.isHidden()).isFalse();
+        verify(reportRepository, never()).countByPostId(any());
+    }
+
     private void setId(Object obj, Long id) {
         try {
             var field = obj.getClass().getDeclaredField("id");

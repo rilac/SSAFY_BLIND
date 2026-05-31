@@ -44,6 +44,11 @@ public class Post {
     @Builder.Default
     private boolean hidden = false;
 
+    // 관리자가 복원(검수 완료)한 글 — 재신고가 임계값을 넘어도 자동 숨김 대상에서 제외(재숨김 루프 방지, §1-1).
+    // 기존 데이터/ddl-auto update 호환을 위해 DB NOT NULL 제약은 두지 않는다.
+    @Builder.Default
+    private boolean reviewed = false;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -78,7 +83,9 @@ public class Post {
         this.hidden = true;
     }
 
+    // 관리자 복원 — 숨김 해제 + 검수 완료 표시(이후 재신고로 인한 재자동숨김 방지, §1-1)
     public void restore() {
         this.hidden = false;
+        this.reviewed = true;
     }
 }

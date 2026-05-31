@@ -13,10 +13,13 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // /api/auth/me 호출의 401은 AuthContext에서 처리하므로 여기서는 무시
-      // 그 외 API 호출의 401은 세션 만료를 의미 → 로그인으로 리다이렉트
+      // 인증 엔드포인트(/auth/login, /auth/logout, /auth/me 등)의 401은
+      // 호출부가 직접 처리한다(로그인 실패 메시지 노출 등). 여기서 리다이렉트하면
+      // 전체 페이지 리로드가 일어나 호출부가 set한 인라인 에러/모달이 즉시 사라진다.
+      // 보호 리소스의 401만 세션 만료로 간주해 로그인으로 리다이렉트한다.
       const requestUrl = error.config?.url || '';
-      if (!requestUrl.includes('/auth/me')) {
+      const isAuthEndpoint = requestUrl.includes('/auth/');
+      if (!isAuthEndpoint) {
         window.location.href = '/login';
       }
     }

@@ -1,6 +1,7 @@
 package com.company.community.security;
 
 import com.company.community.domain.User;
+import com.company.community.domain.UserStatus;
 import com.company.community.repository.UserRepository;
 import com.company.community.util.CookieUtils;
 import io.jsonwebtoken.Claims;
@@ -29,7 +30,8 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
         return path.startsWith("/api/auth/login")
-            || path.startsWith("/api/auth/logout");
+            || path.startsWith("/api/auth/logout")
+            || path.startsWith("/actuator/health"); // 헬스체크는 토큰 없이 통과(SecurityConfig permitAll)
     }
 
     @Override
@@ -40,40 +42,55 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String token = extractTokenFromCookie(request);
 
         if (token == null) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"message\":\"인증이 필요합니다.\"}");
+            sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "인증이 필요합니다.");
             return;
         }
 
         try {
             Claims claims = jwtProvider.parseToken(token);
             Long userId = Long.valueOf(claims.getSubject());
-            String status = claims.get("status", String.class);
 
-            if ("PENDING".equals(status)
-                    && !request.getRequestURI().startsWith("/api/onboarding")
-                    && !request.getRequestURI().equals("/api/auth/me")) {
-                response.setStatus(HttpServletResponse.SC_FORBIDDEN);
-                response.setContentType("application/json;charset=UTF-8");
-                response.getWriter().write("{\"message\":\"온보딩을 완료해주세요.\"}");
+            // H-NEW-2: 토큰 claim이 아니라 현재 DB 상태로 재검증한다.
+            // 탈퇴(WITHDRAWN)/휴면(DORMANT) 처리 후에는 (정상 흐름에선 쿠키가 만료되지만)
+            // 탈취된 토큰 사본이 만료 전이라도 즉시 무효화된다.
+            User user = userRepository.findById(userId).orElse(null);
+            if (user == null) {
+                sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "유효하지 않은 토큰입니다.");
                 return;
             }
 
-            User user = userRepository.findById(userId).orElse(null);
-            if (user != null) {
-                UsernamePasswordAuthenticationToken auth =
-                        new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
-                SecurityContextHolder.getContext().setAuthentication(auth);
+            UserStatus status = user.getStatus();
+            String path = request.getRequestURI();
+
+            if (status == UserStatus.PENDING) {
+                // 온보딩 미완료 — 온보딩/me 외 접근 차단
+                if (!path.startsWith("/api/onboarding") && !path.equals("/api/auth/me")) {
+                    sendError(response, HttpServletResponse.SC_FORBIDDEN, "온보딩을 완료해주세요.");
+                    return;
+                }
+            } else if (status != UserStatus.ACTIVE) {
+                // DORMANT/WITHDRAWN — 토큰 무효(재로그인 필요)
+                sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "세션이 만료되었습니다. 다시 로그인해주세요.");
+                return;
             }
+
+            UsernamePasswordAuthenticationToken auth =
+                    new UsernamePasswordAuthenticationToken(user, null, user.getAuthorities());
+            SecurityContextHolder.getContext().setAuthentication(auth);
         } catch (JwtException e) {
-            response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
-            response.setContentType("application/json;charset=UTF-8");
-            response.getWriter().write("{\"message\":\"유효하지 않은 토큰입니다.\"}");
+            sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "유효하지 않은 토큰입니다.");
             return;
         }
 
         chain.doFilter(request, response);
+    }
+
+    // JSON 에러 응답 헬퍼 — 메시지의 따옴표/역슬래시만 최소 이스케이프
+    private void sendError(HttpServletResponse response, int status, String message) throws IOException {
+        response.setStatus(status);
+        response.setContentType("application/json;charset=UTF-8");
+        String escaped = message.replace("\\", "\\\\").replace("\"", "\\\"");
+        response.getWriter().write("{\"message\":\"" + escaped + "\"}");
     }
 
     private String extractTokenFromCookie(HttpServletRequest request) {

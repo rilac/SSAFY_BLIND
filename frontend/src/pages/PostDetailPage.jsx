@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ThumbsUp, Bookmark, Flag, Eye, Pencil, Trash2 } from 'lucide-react';
 import api from '../api/client';
 import ReportModal from '../components/ReportModal';
+import ConfirmDialog from '../components/ConfirmDialog';
+import AlertDialog from '../components/AlertDialog';
 import { formatTimestamp, formatNumber } from '../lib/format';
 import { categoryLabel } from '../lib/categories';
 
@@ -21,8 +23,19 @@ export default function PostDetailPage() {
   const [commentLoading, setCommentLoading] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
   const [reportSubmitting, setReportSubmitting] = useState(false);
+  // 커스텀 모달(M-NEW-4) — 네이티브 alert/confirm 대체
+  const [notice, setNotice] = useState(null); // { title?, message }
+  const [confirmState, setConfirmState] = useState(null); // { ...props, onConfirm }
+
+  // 동일 id에 대해 GET /posts/{id}를 1회만 보내기 위한 가드.
+  // StrictMode(dev)는 effect를 두 번 실행하는데, 서버의 incrementViewCount가
+  // 요청마다 1회 일어나므로 가드가 없으면 조회수가 +2 된다. AbortController로는
+  // 서버가 이미 증가시킨 뒤일 수 있어 막을 수 없으므로, 두 번째 요청 자체를 차단한다.
+  const fetchedIdRef = useRef(null);
 
   useEffect(() => {
+    if (fetchedIdRef.current === id) return;
+    fetchedIdRef.current = id;
     const fetchAll = async () => {
       setLoading(true);
       try {
@@ -48,7 +61,7 @@ export default function PostDetailPage() {
       const res = await api.post(`/posts/${id}/like`);
       setPost((prev) => ({ ...prev, isLiked: res.data.liked, likeCount: res.data.likeCount }));
     } catch {
-      alert('좋아요 처리에 실패했습니다.');
+      setNotice({ title: '좋아요 실패', message: '좋아요 처리에 실패했습니다.' });
     } finally {
       setLikeLoading(false);
     }
@@ -61,7 +74,7 @@ export default function PostDetailPage() {
       const res = await api.post(`/posts/${id}/bookmark`);
       setPost((prev) => ({ ...prev, isBookmarked: res.data.bookmarked }));
     } catch {
-      alert('스크랩 처리에 실패했습니다.');
+      setNotice({ title: '스크랩 실패', message: '스크랩 처리에 실패했습니다.' });
     } finally {
       setBookmarkLoading(false);
     }
@@ -72,22 +85,38 @@ export default function PostDetailPage() {
     try {
       await api.post(`/posts/${id}/report`, { reason });
       setReportOpen(false);
-      alert('신고가 접수되었습니다.');
+      setNotice({ title: '신고 접수', message: '신고가 접수되었습니다.' });
     } catch {
-      alert('신고 처리에 실패했습니다.');
+      setNotice({ title: '신고 실패', message: '신고 처리에 실패했습니다.' });
     } finally {
       setReportSubmitting(false);
     }
   };
 
-  const handleDelete = async () => {
-    if (!window.confirm('정말로 이 게시글을 삭제하시겠습니까?')) return;
+  const requestDelete = () => {
+    setConfirmState({
+      title: '게시글 삭제',
+      message: '정말로 이 게시글을 삭제하시겠습니까?',
+      confirmLabel: '삭제',
+      danger: true,
+      onConfirm: performDelete,
+    });
+  };
+
+  const performDelete = async () => {
     try {
       await api.delete(`/posts/${id}`);
       navigate('/feed');
     } catch {
-      alert('게시글 삭제에 실패했습니다.');
+      setNotice({ title: '삭제 실패', message: '게시글 삭제에 실패했습니다.' });
     }
+  };
+
+  // 확인 모달 '확인' 클릭 — 모달을 닫고 저장된 액션 실행
+  const handleConfirm = () => {
+    const fn = confirmState?.onConfirm;
+    setConfirmState(null);
+    fn?.();
   };
 
   const handleCommentSubmit = async (e) => {
@@ -100,7 +129,7 @@ export default function PostDetailPage() {
       setComments((prev) => [...prev, res.data]);
       setCommentInput('');
     } catch {
-      alert('댓글 작성에 실패했습니다.');
+      setNotice({ title: '댓글 작성 실패', message: '댓글 작성에 실패했습니다.' });
     } finally {
       setCommentLoading(false);
     }
@@ -111,7 +140,7 @@ export default function PostDetailPage() {
       await api.delete(`/posts/${id}/comments/${commentId}`);
       setComments((prev) => prev.filter((c) => c.id !== commentId));
     } catch {
-      alert('댓글 삭제에 실패했습니다.');
+      setNotice({ title: '댓글 삭제 실패', message: '댓글 삭제에 실패했습니다.' });
     }
   };
 
@@ -174,7 +203,7 @@ export default function PostDetailPage() {
                   수정
                 </button>
                 <button
-                  onClick={handleDelete}
+                  onClick={requestDelete}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity"
                 >
                   <Trash2 size={12} />
@@ -289,6 +318,22 @@ export default function PostDetailPage() {
         onClose={() => setReportOpen(false)}
         onSubmit={submitReport}
         submitting={reportSubmitting}
+      />
+
+      <ConfirmDialog
+        open={!!confirmState}
+        title={confirmState?.title}
+        message={confirmState?.message}
+        confirmLabel={confirmState?.confirmLabel}
+        danger={confirmState?.danger}
+        onConfirm={handleConfirm}
+        onClose={() => setConfirmState(null)}
+      />
+      <AlertDialog
+        open={!!notice}
+        title={notice?.title}
+        message={notice?.message}
+        onClose={() => setNotice(null)}
       />
     </div>
   );

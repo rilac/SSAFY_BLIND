@@ -77,6 +77,11 @@ public class User implements UserDetails {
         }
     }
 
+    // M-NEW-6: 최초 관리자 부트스트랩 — 환경변수로 지정한 계정을 ADMIN으로 승격. @Setter 금지.
+    public void promoteToAdmin() {
+        this.role = UserRole.ADMIN;
+    }
+
     // 회원 탈퇴 — PII 익명화 + 재로그인 매칭 불가 처리. 게시글/댓글은 FK 보존.
     public void withdraw() {
         this.nickname = null;

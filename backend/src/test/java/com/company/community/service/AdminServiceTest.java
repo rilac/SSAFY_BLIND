@@ -61,7 +61,7 @@ class AdminServiceTest {
     }
 
     @Test
-    @DisplayName("숨김 복원 시 hidden=false가 된다")
+    @DisplayName("숨김 복원 시 hidden=false + reviewed=true(재자동숨김 제외)가 된다")
     void test_숨김_복원() {
         post.hide();
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
@@ -69,6 +69,7 @@ class AdminServiceTest {
         adminService.restorePost(10L);
 
         assertThat(post.isHidden()).isFalse();
+        assertThat(post.isReviewed()).isTrue();
     }
 
     private void setId(Object obj, Long id) {

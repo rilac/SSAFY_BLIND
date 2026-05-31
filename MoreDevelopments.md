@@ -15,6 +15,26 @@
 
 ---
 
+## ✅ Phase 0 — 즉시 버그 수정 (완료: 2026-05-31)
+
+1차 배포 직전 사용자가 직접 체감한 UX/기능 버그 5종을 수정했습니다. 모든 수정은 실제 연동 프론트(`frontend/src`)에서 이뤄졌으며, 백엔드 변경은 없습니다. 알림/확인 창은 네이티브 `alert`/`confirm` 대신 앱 디자인에 맞춘 커스텀 모달로 구현했습니다.
+
+**공통 — 재사용 모달 컴포넌트 신규** (`ReportModal` 마크업 미러링)
+- `frontend/src/components/ConfirmDialog.jsx` — 확인/취소 2버튼(`danger` 옵션).
+- `frontend/src/components/AlertDialog.jsx` — 확인 1버튼(알림용).
+
+| # | 증상 | 원인 | 수정 |
+|---|------|------|------|
+| **Bug 1** | 로그인 실패 알림이 잠깐 떴다 사라짐 | `api/client.js` 응답 인터셉터가 `/auth/me` 외 **모든 401에서 전체 페이지 리로드** → 로그인 실패(401)도 리로드되어 인라인 에러 소멸 | `client.js` 401 가드를 **인증 엔드포인트 전체 제외**(`/auth/`)로 변경. `LoginPage`는 실패 시 `AlertDialog` 노출(401이면 "Mattermost 인증 실패" 명시) |
+| **Bug 2** | 로그인 직후 피드 미로딩(사이드바 클릭해야 표시) | StrictMode 이중 effect / 인증 커밋 타이밍 경합 | `FeedPage` 초기 로드를 **`AbortController`+cleanup**으로 보호하고 **`user?.id` 준비 후** 1회 실행. 취소된 요청은 loading 플래그를 건드리지 않음 |
+| **Bug 3** | 관리자 페이지에서 건의함 미조회 | `AdminPage`가 신고·건의 요청을 `Promise.all`로 묶어 **한쪽(신고) 실패 시 전체 reject** | `Promise.allSettled`로 분리 — 한쪽 실패가 다른 쪽 렌더를 막지 않음 |
+| **Bug 4** | 로그아웃이 확인 없이 즉시 실행 | 사이드바 로그아웃이 `logout()` 즉시 호출 | `FeedPage`에 `ConfirmDialog`("정말 로그아웃 하시겠습니까?") 추가. 확인 시에만 로그아웃, 사용자 메뉴는 닫힘 |
+| **Bug 5** | 게시글 1회 진입 시 조회수 +2 | StrictMode가 dev에서 effect 2회 실행 → `GET /posts/{id}` 2회 → `incrementViewCount` 2회 | `PostDetailPage`에 **`useRef` 가드**(`fetchedIdRef`)로 동일 `id` fetch 1회만 전송. (AbortController는 서버가 이미 증가시킨 뒤일 수 있어 부적합) |
+
+> 참고: Bug 5의 **서버단 정식 중복제거**(작성자 제외 + 사용자/24h 단위)는 [M-2](#m-2-조회수-자가-증가어뷰징--본인새로고침마다-1)로 별도 진행. Bug 2의 PENDING 라우팅 가드 강화는 [M-3](#m-3-pending-유저의-직접-접근-시-ux-부재)와 연계.
+
+---
+
 ## ⭐ 가장 먼저 손볼 3가지 (리뷰 권고)
 
 리뷰어가 보안 위험을 가장 크게 줄이는 항목으로 꼽은 우선순위입니다.
@@ -69,16 +89,19 @@
 - **현상**: 상세 조회마다 무조건 +1이라 본인이 새로고침할 때도 증가 → 조회수가 비정상적으로 부풀려짐.
 - **근거**: `service/PostService.getPost`가 `incrementViewCount`를 무조건 호출(작성자/중복 방문 구분 없음).
 - **제안**: 작성자 본인 제외, 사용자·세션·기간(예: 24h) 단위 중복 제거(조회 이력 테이블 또는 캐시 키).
+- **진행**: Phase 0(Bug 5)에서 dev StrictMode 이중 fetch로 인한 **+2 문제는 프론트 `useRef` 가드로 해결**. 본 항목(작성자 제외·새로고침 중복 제거)은 서버단 정식 처리로 후속(Phase 3).
 
 ### M-3. PENDING 유저의 직접 접근 시 UX 부재
 - **현상**: PENDING 유저가 주소창으로 `/feed` 등에 접근하면 빈 화면 + 콘솔 403만 뜨고 온보딩으로 유도되지 않음.
 - **근거**: 백엔드 `JwtAuthFilter`는 PENDING에 대해 온보딩/`auth/me` 외 403 반환(정상). 프론트(현행 Figma 앱)는 라우팅 가드가 없고 목 데이터 기반이라 상태 분기 미처리.
 - **제안**: 프론트에서 `/auth/me`의 `status`에 따라 라우팅 가드(PENDING → 온보딩 강제 리다이렉트), 403 응답 시 온보딩 안내.
+- **연계**: Phase 0(Bug 2)에서 피드 초기 로드 경합은 해결됐으나, PENDING 계정의 `/feed` 직접 접근 시 온보딩 강제는 미구현. 실제 연동 프론트(`frontend/src/components/PrivateRoute.jsx`)에 status 분기 추가 필요(Phase 2).
 
-### M-4. 카테고리 정의 불일치 (백엔드 3종 vs 프론트 6종)
-- **현상**: 백엔드 `PostCategory`는 `FREE/JOB/QUESTION` 3종인데, 현행 프론트 타입은 `free/job/question/project/lounge`(+all) 6종으로 정의되어 있어 연동 시 불일치.
-- **근거**: `domain/PostCategory.java` vs `frontend/사내 블라인드 웹 어플리케이션/src/app/types.ts`.
-- **제안**: 카테고리 단일 정의(SSOT) 합의 후 양쪽 동기화. 백엔드 enum을 기준으로 프론트 라벨/값 정렬.
+### M-4. 카테고리 정의 불일치 (mock 프론트 한정 — 실제 연동 프론트는 해결됨)
+- **정정(2026-05-31 검증)**: 실제 연동 프론트 `frontend/src/lib/categories.js`는 백엔드와 **이미 일치**(`FREE/JOB/QUESTION`, 라벨까지 동일). 불일치는 **mock 프론트(`사내 블라인드 웹 어플리케이션`)** 에만 남아 있음.
+- **현상**: mock 프론트 타입은 `free/job/question/project/lounge`(+all) 6종으로 정의되어 백엔드 3종과 불일치.
+- **근거**: `domain/PostCategory.java`(FREE/JOB/QUESTION) = `frontend/src/lib/categories.js`(일치) vs `frontend/사내 블라인드 웹 어플리케이션/src/app/types.ts`(6종).
+- **제안**: 실제 연동 프론트는 조치 불요. mock 프론트를 본 연동에 이식·아카이브할 때 백엔드 enum 기준으로 정렬(F-3/F-4와 함께 처리).
 
 ### M-5. CORS 허용 오리진 하드코딩
 - **현상**: 운영 배포 시 CORS 오리진을 코드에서 직접 고쳐야 함.
@@ -146,10 +169,12 @@
 
 ## 권장 진행 순서 (로드맵)
 
-| 단계 | 범위 | 항목 |
-|------|------|------|
-| **0. 보안 핫픽스** | 배포 전 필수 | C-1, H-2, H-3, H-4 |
-| **1. 정책 확정** | 설계 합의 | H-anon(익명성), M-4(카테고리), M-7(인증 명칭) |
-| **2. 연동/UX** | 사용성 | F-1, F-2, M-3 |
-| **3. 운영 품질** | 안정화 | M-1, M-2, M-5, M-6, M-8 |
-| **4. 테스트/인프라** | 신뢰성 | T-1~T-5, D-1~D-4 |
+| 단계 | 범위 | 항목 | 상태 |
+|------|------|------|------|
+| **Phase 0. 즉시 버그 수정** | 1차 배포 직전 체감 버그 | Bug 1~5 + 공통 모달 | ✅ 완료 (2026-05-31) |
+| **Phase 1. 보안 핫픽스** | 배포 전 필수 | C-1, H-2, H-3, H-4 | 계획 |
+| **Phase 2. 정책 확정 & 연동/UX** | 설계 합의·사용성 | H-anon(익명성), M-7(인증 명칭), M-3(PENDING 가드), M-4(mock 정리) | 계획 |
+| **Phase 3. 운영 품질** | 안정화 | M-2(조회수 서버단), M-1, M-5, M-6, M-8 | 계획 |
+| **Phase 4. 테스트 & 인프라** | 신뢰성 | T-1~T-5, D-1~D-4, F-1~F-4(mock 통합) | 계획 |
+
+> Phase 0은 실제 연동 프론트(`frontend/src`)의 UX/기능 버그 수정으로 완료. Phase 1~4는 본 문서의 C/H/M/T/D 항목을 우선순위에 맞춰 단계화한 것으로, 아직 미실행(문서화 단계).

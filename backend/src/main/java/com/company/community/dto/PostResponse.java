@@ -42,13 +42,21 @@ public class PostResponse {
     // author는 호출부에서 배치 조회한 작성자 User를 전달받는다.
     public static PostResponse of(Post post, Long currentUserId, boolean isLiked,
                                   long likeCount, boolean isBookmarked, User author) {
+        return of(post, currentUserId, isLiked, likeCount, isBookmarked, author, post.getViewCount());
+    }
+
+    // M-NEW-5: 조회수를 명시적으로 전달하는 변형.
+    // getPost는 조회수를 벌크 UPDATE(원자적)로 올리므로 관리 엔티티의 viewCount는 갱신 전 값이다.
+    // 엔티티를 직접 변경하면 dirty checking으로 2중 증가하므로, 표시값만 +1 하여 여기로 넘긴다.
+    public static PostResponse of(Post post, Long currentUserId, boolean isLiked,
+                                  long likeCount, boolean isBookmarked, User author, int viewCount) {
         return new PostResponse(
                 post.getId(),
                 post.getCategory(),
                 AuthorInfo.of(author),
                 post.getTitle(),
                 post.getContent(),
-                post.getViewCount(),
+                viewCount,
                 post.getCreatedAt(),
                 post.getUpdatedAt(),
                 post.getAuthor().getId().equals(currentUserId),

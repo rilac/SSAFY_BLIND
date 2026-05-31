@@ -2,6 +2,7 @@ package com.company.community.repository;
 
 import com.company.community.domain.PostLike;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -27,4 +28,9 @@ public interface PostLikeRepository extends JpaRepository<PostLike, Long> {
            "WHERE pl.post.id IN :postIds AND pl.user.id = :userId")
     List<Long> findLikedPostIds(@Param("postIds") List<Long> postIds,
                                 @Param("userId") Long userId);
+
+    // C-NEW-1: 게시글 삭제 전 자식(좋아요) 정리 — FK 제약 위반 방지
+    @Modifying
+    @Query("DELETE FROM PostLike pl WHERE pl.post.id = :postId")
+    void deleteByPostId(@Param("postId") Long postId);
 }

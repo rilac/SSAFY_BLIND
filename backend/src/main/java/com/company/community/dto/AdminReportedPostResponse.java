@@ -24,6 +24,10 @@ public class AdminReportedPostResponse {
     @JsonProperty("hidden")
     private boolean hidden;
 
+    // 관리자가 복원(검수 완료)한 글 — 재자동숨김 제외 대상(§1-1). UI에서 "검토완료" 표시.
+    @JsonProperty("reviewed")
+    private boolean reviewed;
+
     private LocalDateTime createdAt;
 
     public static AdminReportedPostResponse of(Post post, long reportCount,
@@ -34,6 +38,7 @@ public class AdminReportedPostResponse {
                 reportCount,
                 reasonCounts,
                 post.isHidden(),
+                post.isReviewed(),
                 post.getCreatedAt()
         );
     }

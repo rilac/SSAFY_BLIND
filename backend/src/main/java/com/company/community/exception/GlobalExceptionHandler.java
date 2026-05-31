@@ -44,6 +44,22 @@ public class GlobalExceptionHandler {
                 .body(Map.of("message", e.getMessage()));
     }
 
+    // C-NEW-2: 로그인 레이트리밋 초과 → 429
+    @ExceptionHandler(TooManyRequestsException.class)
+    public ResponseEntity<Map<String, String>> handleTooManyRequests(TooManyRequestsException e) {
+        return ResponseEntity
+                .status(HttpStatus.TOO_MANY_REQUESTS)
+                .body(Map.of("message", e.getMessage()));
+    }
+
+    // H-NEW-3: Mattermost 호출 타임아웃/장애 → 503 (빠른 실패)
+    @ExceptionHandler(MattermostUnavailableException.class)
+    public ResponseEntity<Map<String, String>> handleMattermostUnavailable(MattermostUnavailableException e) {
+        return ResponseEntity
+                .status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of("message", e.getMessage()));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidation(MethodArgumentNotValidException e) {
         String errors = e.getBindingResult().getFieldErrors().stream()

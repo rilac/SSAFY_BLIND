@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Inbox } from 'lucide-react';
 import api from '../api/client';
+import AlertDialog from '../components/AlertDialog';
 
 // 건의함 — 관리자에게만 전달되는 비밀 피드백/서비스 제안
 export default function FeedbackPage() {
@@ -10,6 +11,8 @@ export default function FeedbackPage() {
   const [content, setContent] = useState('');
   const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // 전송 완료 알림(M-NEW-4) — 확인 시 피드로 이동
+  const [submitted, setSubmitted] = useState(false);
 
   const isValid = title.trim() && content.trim();
 
@@ -20,8 +23,8 @@ export default function FeedbackPage() {
     setSubmitting(true);
     try {
       await api.post('/feedback', { title: title.trim(), content: content.trim() });
-      alert('소중한 의견 감사합니다. 관리자에게 전달되었습니다.');
-      navigate('/feed');
+      // 전송 성공 — submitting을 유지(재제출 방지)한 채 완료 모달을 띄우고, 확인 시 이동.
+      setSubmitted(true);
     } catch (err) {
       setError(err.response?.data?.message || '전송에 실패했습니다.');
       setSubmitting(false);
@@ -91,6 +94,13 @@ export default function FeedbackPage() {
           </div>
         </form>
       </div>
+
+      <AlertDialog
+        open={submitted}
+        title="전송 완료"
+        message="소중한 의견 감사합니다. 관리자에게 전달되었습니다."
+        onClose={() => navigate('/feed')}
+      />
     </div>
   );
 }

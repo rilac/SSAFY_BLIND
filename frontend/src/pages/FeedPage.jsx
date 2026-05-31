@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -7,6 +8,8 @@ import Sidebar from '../components/Sidebar';
 import TopBar from '../components/TopBar';
 import PostCard from '../components/PostCard';
 import ReportModal from '../components/ReportModal';
+import ConfirmDialog from '../components/ConfirmDialog';
+import AlertDialog from '../components/AlertDialog';
 import { CATEGORY_LABELS } from '../lib/categories';
 
 const PAGE_SIZE = 20;
@@ -47,17 +50,29 @@ export default function FeedPage() {
   const [reportTargetId, setReportTargetId] = useState(null);
   const [reportSubmitting, setReportSubmitting] = useState(false);
 
+  // 로그아웃 확인 모달
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+
+  // 알림 모달(M-NEW-4) — 네이티브 alert 대체
+  const [notice, setNotice] = useState(null); // { title?, message }
+
   // 검색 디바운스
   useEffect(() => {
     const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
     return () => clearTimeout(t);
   }, [searchInput]);
 
-  // 필터 변경 시 첫 페이지부터 재조회
+  // 필터 변경 시 첫 페이지부터 재조회.
+  // - 인증 준비(user?.id) 후에만 실행 → 로그인 직후 인증 커밋과의 경합 방지.
+  // - AbortController + cleanup → StrictMode 이중 effect/언마운트 시 첫 요청을 취소,
+  //   최종 1회만 상태를 반영해 "로그인 직후 피드 미로딩"을 방지한다.
   useEffect(() => {
-    fetchPosts(0, true);
+    if (!user?.id) return;
+    const controller = new AbortController();
+    fetchPosts(0, true, controller.signal);
+    return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [category, scope, sort, debouncedSearch]);
+  }, [user?.id, category, scope, sort, debouncedSearch]);
 
   // 알림 최초 로드
   useEffect(() => {
@@ -75,17 +90,19 @@ export default function FeedPage() {
     return params.toString();
   };
 
-  const fetchPosts = async (pageNum, reset) => {
+  const fetchPosts = async (pageNum, reset, signal) => {
     reset ? setLoading(true) : setLoadingMore(true);
     try {
-      const res = await api.get(`/posts?${buildQuery(pageNum)}`);
+      const res = await api.get(`/posts?${buildQuery(pageNum)}`, { signal });
       const data = res.data;
       setPosts((prev) => (reset ? data.content : [...prev, ...data.content]));
       setPage(data.currentPage);
       setHasNext(data.hasNext);
+      reset ? setLoading(false) : setLoadingMore(false);
     } catch (err) {
+      // 취소된 요청은 후속 요청이 상태를 처리하므로 loading 플래그를 건드리지 않는다.
+      if (axios.isCancel(err)) return;
       console.error('게시글 목록 조회 실패', err);
-    } finally {
       reset ? setLoading(false) : setLoadingMore(false);
     }
   };
@@ -110,7 +127,7 @@ export default function FeedPage() {
         setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, isBookmarked: bookmarked } : p)));
       }
     } catch {
-      alert('스크랩 처리에 실패했습니다.');
+      setNotice({ title: '스크랩 실패', message: '스크랩 처리에 실패했습니다.' });
     }
   };
 
@@ -119,9 +136,9 @@ export default function FeedPage() {
     try {
       await api.post(`/posts/${reportTargetId}/report`, { reason });
       setReportTargetId(null);
-      alert('신고가 접수되었습니다.');
+      setNotice({ title: '신고 접수', message: '신고가 접수되었습니다.' });
     } catch {
-      alert('신고 처리에 실패했습니다.');
+      setNotice({ title: '신고 실패', message: '신고 처리에 실패했습니다.' });
     } finally {
       setReportSubmitting(false);
     }
@@ -132,7 +149,15 @@ export default function FeedPage() {
     setCategory(c);
   };
 
+  // 사이드바 로그아웃 클릭 → 즉시 로그아웃하지 않고 확인 모달을 연다(사용자 메뉴는 닫음).
+  const requestLogout = () => {
+    setUserMenuOpen(false);
+    setLogoutConfirmOpen(true);
+  };
+
+  // 확인 모달에서 '로그아웃' 확정 시에만 실제 로그아웃.
   const handleLogout = async () => {
+    setLogoutConfirmOpen(false);
     await logout();
     navigate('/login');
   };
@@ -170,7 +195,7 @@ export default function FeedPage() {
         onSelectScope={setScope}
         onToggleUserMenu={() => setUserMenuOpen((o) => !o)}
         onOpenSettings={() => navigate('/settings')}
-        onLogout={handleLogout}
+        onLogout={requestLogout}
         onHome={() => navigate('/feed')}
         onFeedback={() => navigate('/feedback')}
         onAdmin={() => navigate('/admin')}
@@ -245,6 +270,24 @@ export default function FeedPage() {
         onClose={() => setReportTargetId(null)}
         onSubmit={submitReport}
         submitting={reportSubmitting}
+      />
+
+      <ConfirmDialog
+        open={logoutConfirmOpen}
+        title="로그아웃"
+        message="정말 로그아웃 하시겠습니까?"
+        confirmLabel="로그아웃"
+        cancelLabel="취소"
+        danger
+        onConfirm={handleLogout}
+        onClose={() => setLogoutConfirmOpen(false)}
+      />
+
+      <AlertDialog
+        open={!!notice}
+        title={notice?.title}
+        message={notice?.message}
+        onClose={() => setNotice(null)}
       />
     </div>
   );

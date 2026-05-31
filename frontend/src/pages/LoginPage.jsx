@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import AlertDialog from '../components/AlertDialog';
 
 // Mattermost 로그인 — 데모 디자인 + 실제 /auth/login
 export default function LoginPage() {
@@ -21,7 +22,13 @@ export default function LoginPage() {
       await refreshUser();
       navigate(res.data.isNewUser ? '/onboarding' : '/feed');
     } catch (err) {
-      setError(err.response?.data?.message || '로그인에 실패했습니다.');
+      // 서버 메시지 우선, 401(인증 실패)은 원인을 명시.
+      const serverMessage = err.response?.data?.message;
+      const fallback =
+        err.response?.status === 401
+          ? 'Mattermost 인증에 실패했습니다. ID/비밀번호를 확인해주세요.'
+          : '로그인에 실패했습니다. 잠시 후 다시 시도해주세요.';
+      setError(serverMessage || fallback);
     } finally {
       setLoading(false);
     }
@@ -64,8 +71,6 @@ export default function LoginPage() {
             </div>
           </div>
 
-          {error && <p className="text-sm text-destructive font-mono mt-4 text-center">{error}</p>}
-
           <button
             type="submit"
             disabled={loading}
@@ -79,6 +84,13 @@ export default function LoginPage() {
           </p>
         </form>
       </div>
+
+      <AlertDialog
+        open={!!error}
+        title="로그인 실패"
+        message={error}
+        onClose={() => setError('')}
+      />
     </div>
   );
 }

@@ -15,6 +15,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.util.Optional;
 
@@ -97,5 +98,56 @@ class AuthServiceTest {
         // Assert — save()가 호출되지 않아야 하고 isNewUser=false
         verify(userRepository, never()).save(any());
         assertThat(result.isNewUser()).isFalse();
+    }
+
+    @Test
+    @DisplayName("M-NEW-6: 지정된 MM 계정은 로그인 시 ADMIN으로 승격된다")
+    void test_지정계정_로그인시_ADMIN으로_승격된다() {
+        // Arrange — app.admin.bootstrap-usernames에 "adminuser" 지정
+        ReflectionTestUtils.setField(authService, "adminBootstrapUsernames", "adminuser, otheruser");
+
+        MattermostUser mockMmUser = mock(MattermostUser.class);
+        given(mockMmUser.getId()).willReturn("mm-admin-1");
+        given(mmClient.login(any(), any())).willReturn(mockMmUser);
+        given(userRepository.existsByMmUserId("mm-admin-1")).willReturn(true);
+
+        User existing = User.builder()
+                .mmUserId("mm-admin-1")
+                .mmUsername("adminuser")
+                .status(UserStatus.ACTIVE)
+                .role(UserRole.USER)
+                .build();
+        given(userRepository.findByMmUserId("mm-admin-1")).willReturn(Optional.of(existing));
+        given(jwtProvider.generateToken(any(), any(), any())).willReturn("mock-jwt-token");
+
+        // Act
+        authService.login("adminuser", "password");
+
+        // Assert — role이 ADMIN으로 승격됨
+        assertThat(existing.getRole()).isEqualTo(UserRole.ADMIN);
+    }
+
+    @Test
+    @DisplayName("M-NEW-6: 미지정 계정은 ADMIN으로 승격되지 않는다")
+    void test_미지정계정은_승격되지_않는다() {
+        ReflectionTestUtils.setField(authService, "adminBootstrapUsernames", "adminuser");
+
+        MattermostUser mockMmUser = mock(MattermostUser.class);
+        given(mockMmUser.getId()).willReturn("mm-normal-1");
+        given(mmClient.login(any(), any())).willReturn(mockMmUser);
+        given(userRepository.existsByMmUserId("mm-normal-1")).willReturn(true);
+
+        User existing = User.builder()
+                .mmUserId("mm-normal-1")
+                .mmUsername("normaluser")
+                .status(UserStatus.ACTIVE)
+                .role(UserRole.USER)
+                .build();
+        given(userRepository.findByMmUserId("mm-normal-1")).willReturn(Optional.of(existing));
+        given(jwtProvider.generateToken(any(), any(), any())).willReturn("mock-jwt-token");
+
+        authService.login("normaluser", "password");
+
+        assertThat(existing.getRole()).isEqualTo(UserRole.USER);
     }
 }

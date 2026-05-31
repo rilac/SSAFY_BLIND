@@ -3,14 +3,18 @@ package com.company.community.service;
 import com.company.community.domain.Post;
 import com.company.community.domain.PostCategory;
 import com.company.community.domain.PostLike;
+import com.company.community.domain.PostView;
 import com.company.community.domain.User;
 import com.company.community.domain.UserRole;
 import com.company.community.dto.*;
 import com.company.community.exception.ForbiddenException;
 import com.company.community.repository.BookmarkRepository;
 import com.company.community.repository.CommentRepository;
+import com.company.community.repository.NotificationRepository;
 import com.company.community.repository.PostLikeRepository;
 import com.company.community.repository.PostRepository;
+import com.company.community.repository.PostViewRepository;
+import com.company.community.repository.ReportRepository;
 import com.company.community.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -20,6 +24,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -32,7 +37,13 @@ public class PostService {
     private final PostLikeRepository postLikeRepository; // (#4)
     private final CommentRepository commentRepository;   // 댓글 수 배치 집계
     private final BookmarkRepository bookmarkRepository;  // 스크랩
+    private final ReportRepository reportRepository;       // C-NEW-1: 삭제 시 신고 정리
+    private final NotificationRepository notificationRepository; // C-NEW-1: 삭제 시 알림 정리
+    private final PostViewRepository postViewRepository;   // M-NEW-5: 조회수 중복 제거 이력
     private final NotificationService notificationService; // 좋아요 알림
+
+    // M-NEW-5: 동일 유저의 재조회를 같은 글에 대해 이 시간 내에는 1회만 카운트.
+    private static final long VIEW_DEDUP_HOURS = 24;
 
     /**
      * 게시글 작성 — author는 서버에서만 관리, 응답에는 노출하지 않음
@@ -57,25 +68,65 @@ public class PostService {
     /**
      * 게시글 상세 조회 — isMine/isLiked/likeCount/isBookmarked/author 세팅.
      * 숨김(신고 누적) 글은 ADMIN만 열람 가능.
+     * M-NEW-5: 조회수는 작성자 본인을 제외하고, 동일 유저는 24h 내 1회만 카운트한다.
      */
     @Transactional
     public PostResponse getPost(Long postId, Long currentUserId, UserRole role) {
-        // 벌크 UPDATE로 조회수 증가 — race condition 방지
-        postRepository.incrementViewCount(postId);
-
+        // 숨김 판정/작성자 판정을 위해 먼저 로드(이후 벌크 증가가 이 엔티티를 갱신하지 않도록 순서 주의)
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
 
-        // 숨김 글은 관리자가 아니면 존재하지 않는 것으로 처리
+        // 숨김 글은 관리자가 아니면 존재하지 않는 것으로 처리(이때는 조회수도 올리지 않음)
         if (post.isHidden() && role != UserRole.ADMIN) {
             throw new NoSuchElementException("존재하지 않는 게시글입니다.");
         }
+
+        // 카운트 대상이면 조회 이력을 기록/갱신하고 벌크 UPDATE로 원자적 증가(race condition 방지)
+        boolean counted = registerViewIfCountable(post, currentUserId);
+        if (counted) {
+            postRepository.incrementViewCount(postId);
+        }
+        // 벌크 UPDATE는 관리 엔티티에 반영되지 않으므로 표시값만 +1 하여 응답에 전달
+        int viewCount = post.getViewCount() + (counted ? 1 : 0);
 
         boolean isLiked = postLikeRepository.existsByPostIdAndUserId(postId, currentUserId);
         long likeCount = postLikeRepository.countByPostId(postId);
         boolean isBookmarked = bookmarkRepository.existsByPostIdAndUserId(postId, currentUserId);
 
-        return PostResponse.of(post, currentUserId, isLiked, likeCount, isBookmarked, post.getAuthor());
+        return PostResponse.of(post, currentUserId, isLiked, likeCount, isBookmarked, post.getAuthor(), viewCount);
+    }
+
+    /**
+     * M-NEW-5: 이번 조회를 조회수로 집계해야 하면 조회 이력을 남기고 true.
+     * - 작성자 본인 조회는 집계 제외(자기 새로고침으로 부풀려지지 않음).
+     * - 동일 유저가 24h 내 이미 본 글이면 제외, 24h 경과 시 이력 갱신 후 집계.
+     * - 최초 조회는 이력 생성 후 집계(동시 최초 조회는 유니크 제약으로 1회만 집계).
+     */
+    private boolean registerViewIfCountable(Post post, Long currentUserId) {
+        if (post.getAuthor().getId().equals(currentUserId)) {
+            return false;
+        }
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime cutoff = now.minusHours(VIEW_DEDUP_HOURS);
+
+        Optional<PostView> existing = postViewRepository.findByPostIdAndUserId(post.getId(), currentUserId);
+        if (existing.isPresent()) {
+            PostView view = existing.get();
+            if (view.getViewedAt().isAfter(cutoff)) {
+                return false; // 24h 내 재조회 — 중복 제외
+            }
+            view.touch(now); // 24h 경과 — 이력 갱신(dirty checking) 후 집계
+            return true;
+        }
+
+        User viewer = userRepository.findById(currentUserId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
+        try {
+            postViewRepository.save(PostView.builder().post(post).user(viewer).viewedAt(now).build());
+            return true;
+        } catch (DataIntegrityViolationException e) {
+            return false; // 동시 최초 조회 경합 — 다른 요청이 집계
+        }
     }
 
     /**
@@ -146,6 +197,16 @@ public class PostService {
         if (!isAuthor && !isAdmin) {
             throw new ForbiddenException("본인의 글만 삭제할 수 있습니다.");
         }
+
+        // C-NEW-1: Post는 comments만 cascade 삭제하므로, post_id를 FK로 참조하는
+        // 자식(신고/좋아요/북마크/조회이력)을 먼저 정리하지 않으면 삭제 시 FK 제약 위반 → 500.
+        // 관리자 삭제 대상은 대부분 신고 5건↑ 숨김 글이라, 정리 없이는 항상 실패한다.
+        reportRepository.deleteByPostId(postId);
+        postLikeRepository.deleteByPostId(postId);
+        bookmarkRepository.deleteByPostId(postId);
+        postViewRepository.deleteByPostId(postId); // M-NEW-5: 조회 이력도 post_id FK → 함께 정리
+        // 알림은 FK는 아니지만 죽은 링크가 남으므로 함께 정리(M-NEW-3).
+        notificationRepository.deleteByPostId(postId);
 
         postRepository.delete(post);
     }

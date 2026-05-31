@@ -2,6 +2,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import PrivateRoute from './components/PrivateRoute';
+import OnboardingRoute from './components/OnboardingRoute';
 import LoginPage from './pages/LoginPage';
 import OnboardingPage from './pages/OnboardingPage';
 import FeedPage from './pages/FeedPage';
@@ -20,7 +21,10 @@ function App() {
           <Routes>
             {/* 공개 라우트 */}
             <Route path="/login" element={<LoginPage />} />
-            <Route path="/onboarding" element={<OnboardingPage />} />
+            {/* 온보딩 — PENDING 전용 (M-NEW-1): 미인증→/login, 이미 온보딩 완료→/feed */}
+            <Route path="/onboarding" element={
+              <OnboardingRoute><OnboardingPage /></OnboardingRoute>
+            } />
 
             {/* 보호된 라우트 */}
             <Route path="/feed" element={

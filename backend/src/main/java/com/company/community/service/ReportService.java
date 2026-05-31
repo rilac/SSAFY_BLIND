@@ -49,8 +49,10 @@ public class ReportService {
             return;
         }
 
-        // 누적 신고가 임계값에 도달하면 자동 숨김 (도메인 메서드, dirty checking 반영)
-        if (!post.isHidden() && reportRepository.countByPostId(postId) >= REPORT_HIDE_THRESHOLD) {
+        // 누적 신고가 임계값에 도달하면 자동 숨김 (도메인 메서드, dirty checking 반영).
+        // 단, 관리자가 복원(검수 완료)한 글은 재신고가 쌓여도 재자동숨김하지 않는다(§1-1 재숨김 루프 방지).
+        if (!post.isHidden() && !post.isReviewed()
+                && reportRepository.countByPostId(postId) >= REPORT_HIDE_THRESHOLD) {
             post.hide();
         }
     }
