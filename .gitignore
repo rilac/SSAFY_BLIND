@@ -379,3 +379,10 @@ gradle-app.setting
 *.hprof
 
 # End of https://www.toptal.com/developers/gitignore/api/java,intellij,macos,windows,react,node,gradle
+
+### Project-specific (H-NEW-4: 리포 위생) ###
+# IDE 메타데이터 전체 무시 — 기존 추적분은 `git rm -r --cached .idea backend/.idea`로 제거함.
+# (위 toptal 템플릿은 .idea 일부만 무시하므로 전체를 명시적으로 무시한다.)
+.idea/
+# node_modules는 위 `node_modules/` 규칙으로 무시되나, 기존 추적분은
+# `git rm -r --cached frontend/node_modules`로 제거함.
