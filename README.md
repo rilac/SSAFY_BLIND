@@ -1,7 +1,7 @@
 # SSAFY BLIND — 사내 익명 커뮤니티
 
-> 상태: **1차 배포 준비 (핵심 기능 구현 완료)** · 운영 완성도 약 65~70% (코드 리뷰 기준)
-> 남은 과제와 개선 로드맵은 [MoreDevelopments.md](./MoreDevelopments.md) 참고
+> 상태: **1·2차 리뷰 반영 Phase A~D 완료** (배포 블로커 해소 + 보안/계정 하드닝 + UX/정책 + 운영 품질) · 운영 완성도 약 85~90%
+> 진행 현황은 [WORKLOG.md](./WORKLOG.md), 분석/로드맵은 [MoreDevelopments.md](./MoreDevelopments.md) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md) 참고
 
 SSAFY Mattermost 계정 기반 사내 익명 게시판 서비스입니다. 구성원은 자신의 Mattermost 계정으로 인증한 뒤, **익명으로** 글·댓글·좋아요·스크랩을 주고받을 수 있습니다. 작성자 정보(실명/계정/이메일)는 서버 내부에서만 관리되며 API 응답에는 일절 노출되지 않습니다.
 
@@ -24,8 +24,7 @@ SSAFY Mattermost 계정 기반 사내 익명 게시판 서비스입니다. 구�
 | Backend | Java 17, Spring Boot 3.2.5, Spring Security, Spring Data JPA, Validation |
 | 인증/토큰 | Mattermost 프록시 인증 → JWT(jjwt 0.11.5), HttpOnly Cookie |
 | Database | MySQL (dev/prod 공통), H2 (테스트 전용 `@DataJpaTest`) |
-| Frontend (현행) | React 18, Vite 6, TypeScript, Tailwind CSS v4, shadcn/Radix UI, MUI |
-| Frontend (레거시) | React 18(JSX), Vite, Axios, React Router |
+| Frontend | React 18 (JSX), Vite 5, Axios, React Router, Tailwind CSS, lucide-react |
 | 빌드 | Gradle (Spring Boot Plugin), Vite |
 
 ---
@@ -65,19 +64,18 @@ SSAFY_BLIND/
 │       ├── exception/                    # 전역 예외 핸들러
 │       └── util/CookieUtils              # 쿠키 생성/만료 유틸
 │
-└── frontend/
-    ├── 사내 블라인드 웹 어플리케이션/    # ★ 현행 UI (Figma 기반 재설계)
-    │   └── src/app/                      #   React 18 + TS + Tailwind v4 + shadcn
-    │       ├── pages/                    #   Login·Onboarding·Feed·PostDetail·
-    │       │                             #   PostCreate·PostEdit·Settings
-    │       ├── components/               #   Sidebar·TopBar·NotificationPanel·
-    │       │                             #   PostCard·PostForm·ui(shadcn)
-    │       └── data/mockData.ts          #   ※ 현재 인메모리 목 데이터로 동작(백엔드 미연동)
-    │
-    └── src/                              # 레거시 JSX 앱 (백엔드 연동 axios 포함, 참고용)
+└── frontend/                           # React 18 (JSX) · Vite · 백엔드 연동(axios + HttpOnly 쿠키)
+    └── src/
+        ├── pages/                       #   Login·Onboarding·Feed·PostDetail·PostCreate·
+        │                                #   PostEdit·Settings·Feedback·Admin
+        ├── components/                  #   Sidebar·TopBar·PostCard·ReportModal·
+        │                                #   ConfirmDialog·AlertDialog·PrivateRoute·OnboardingRoute
+        ├── context/                     #   AuthContext·ThemeContext
+        ├── lib/                         #   format·categories
+        └── api/client.js                #   axios 인스턴스(/api 프록시, 401 처리)
 ```
 
-> **두 개의 프론트엔드**: 현재 화면/디자인의 기준은 `사내 블라인드 웹 어플리케이션`(TypeScript 재설계)이며, 인메모리 목 데이터로 동작합니다. 백엔드와의 실제 연동(axios + 쿠키)은 레거시 `frontend/src` JSX 앱에 구현되어 있습니다. 신규 UI의 API 연동은 남은 핵심 과제입니다([MoreDevelopments.md](./MoreDevelopments.md) F-1 참고).
+> **프론트엔드**: `frontend/src`(React 18 JSX, Vite)가 백엔드와 실제 연동(axios + HttpOnly 쿠키)되는 **유일한 프론트엔드**입니다. 디자인 참고용 Figma export mock(`사내 블라인드 웹 어플리케이션`, TypeScript/shadcn)은 **2026-06-01 저장소에서 제거**했습니다(git 이력에는 보존).
 
 ---
 
@@ -188,14 +186,14 @@ DB_USERNAME=<user> DB_PASSWORD=<pw> \
 ```
 서버는 `http://localhost:8080`에서 실행됩니다.
 
-### 2) Frontend (현행 UI)
+### 2) Frontend
 
 ```bash
-cd "frontend/사내 블라인드 웹 어플리케이션"
+cd frontend
 npm install
-npm run dev      # Vite 개발 서버
+npm run dev      # Vite 개발 서버 (http://localhost:5173, /api → :8080 프록시)
 ```
-> 현재 화면은 인메모리 목 데이터로 동작합니다. 백엔드 연동은 [MoreDevelopments.md](./MoreDevelopments.md) F-1 참고.
+> 프로덕션 빌드는 `npm run build`. 백엔드와 axios + HttpOnly 쿠키로 연동됩니다.
 
 ### 환경변수
 
@@ -207,6 +205,7 @@ npm run dev      # Vite 개발 서버
 | `DB_HOST` / `DB_NAME` / `DB_USERNAME` / `DB_PASSWORD` | MySQL 접속 정보 | ✅ | dev·prod |
 
 > `prod` 프로파일은 `ddl-auto: validate`(스키마 변경 금지), 쿠키 `secure: true`(HTTPS 전용), SQL 로깅 비활성으로 설정됩니다. 모든 민감 값은 환경변수 주입이며 폴백이 없습니다.
+> ⚠️ `validate`라 엔티티가 요구하는 스키마가 미리 있어야 기동됩니다(Flyway 미도입). 배포 전 **`backend/db/migration`의 수동 DDL을 적용**하세요(`backend/db/README.md`).
 
 ---
 
@@ -239,12 +238,14 @@ cd backend && ./gradlew test
 - 목록 통합: **카테고리·검색·정렬(최신/인기)·scope(전체/내글/스크랩)**
 - 게시글 **수정**, 계정 **휴면/탈퇴**(PII 익명화)
 - **MySQL 전환** 및 `dev`/`prod` 프로파일 분리, 시크릿 폴백 제거(미설정 시 즉시 실패)
-- 프론트엔드 **Figma 기반 재설계**(TypeScript · Tailwind v4 · shadcn)
+- 프론트엔드 디자인 시안 **Figma export**(TypeScript/shadcn) 추가 — *참고용 mock, 2026-06-01 저장소에서 제거(실제 연동 프론트는 `frontend/src`)*
 
 ---
 
 ## 알려진 한계 / 다음 단계
 
-코드 리뷰 결과 **운영 완성도 약 65~70%**로 평가되었습니다. 보안 하드닝(레이트리밋·입력 길이 제한·외부 호출 타임아웃·토큰 수명/폐기), 신규 UI의 백엔드 연동, 테스트 폭 확대, 배포·관측 인프라, 익명성 정책 확정이 남은 핵심 과제입니다.
+1·2차 리뷰의 배포 블로커와 보안/UX/운영 품질 이슈는 **Phase A~D에서 반영 완료**(레이트리밋·입력 길이 제한·MM 호출 타임아웃·토큰 상태 재검증·CORS 외부화·관리자 삭제 FK·조회수 서버단 dedup·PENDING 라우팅 가드·한글 웹폰트·Actuator/요청추적 등). 운영 완성도 약 **85~90%**.
 
-자세한 이슈 목록(심각도별)과 개선 로드맵은 **[MoreDevelopments.md](./MoreDevelopments.md)**에 정리되어 있습니다.
+**남은 과제**: Flyway 스키마 마이그레이션(현재는 `backend/db`의 수동 DDL로 대체 — prod `validate` 대비 배포 전 적용 필요), 테스트 폭 확대(컨트롤러 슬라이스·서비스 단위), 기능 확장(마크다운/코드블록·Q&A 채택·기수/캠퍼스 라운지 등).
+
+진행 현황은 **[WORKLOG.md](./WORKLOG.md)**, 심각도별 이슈/로드맵은 **[MoreDevelopments.md](./MoreDevelopments.md)** · **[MoreDevelopments_V2.md](./MoreDevelopments_V2.md)**에 정리되어 있습니다.

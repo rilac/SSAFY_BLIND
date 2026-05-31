@@ -30,7 +30,7 @@
 | **C-NEW-1** 관리자 영구삭제 FK | 🔴 | ✅ | 하드삭제 채택. `PostService.deletePost`가 삭제 전 자식 정리(`reportRepository`/`postLikeRepository`/`bookmarkRepository`/`notificationRepository`의 `deleteByPostId`) 후 `delete`. 4개 repo에 `@Modifying @Query` 추가. `PostServiceTest`에 `InOrder`로 "자식 정리 → 글 삭제" 순서 검증 추가(회귀 방지). |
 | **C-NEW-2** 로그인 레이트리밋 | 🔴 | ✅ | `LoginRateLimiter`(인메모리, IP·loginId 키, 기본 5회/300초 윈도/600초 차단) 신규. `AuthController.login`에서 시도 전 검사·실패만 집계·성공 시 리셋. 초과 시 `TooManyRequestsException`→**429**, 실패 audit 로깅. *(단일 인스턴스 전제 — 수평 확장 시 Redis로 교체. Bucket4j 미도입.)* |
 | **M-NEW-2** CORS 외부화 | 🔴 | ✅ | `app.cors.allowed-origins`(콤마 구분) 프로퍼티로 외부화. 운영은 `APP_CORS_ALLOWED_ORIGINS`로 실제 도메인 지정. |
-| **H-NEW-4** 리포 위생 | 🟠 | ✅ | `git rm -r --cached frontend/node_modules .idea backend/.idea`(3,927개 추적 해제, 작업트리 보존). `.gitignore`에 blanket `.idea/` 추가. **스테이징만 — 커밋은 사용자 확인 후.** |
+| **H-NEW-4** 리포 위생 | 🟠 | ✅ | `git rm -r --cached frontend/node_modules .idea backend/.idea`(추적 해제, 작업트리 보존). `.gitignore`에 blanket `.idea/` 추가. **2026-06-01 커밋·푸시 완료**(`83df359` — Figma mock·루트 고아 package-lock 정리 동반, 추적 파일 ~4,000→137). |
 | **H-NEW-1** 입력 길이 `@Size` | 🟠 | ✅ | `PostCreate/Update`(제목≤200, 본문≤10000), `Comment`(≤1000), `Feedback`(제목≤200, 본문≤5000), `Onboarding`(각 ≤20). 위반 시 기존 핸들러로 **400**. |
 | **H-NEW-3** MM 타임아웃 | 🟠 | ✅ | `MattermostClient` `RestTemplate`에 connect(3s)/read(5s) 타임아웃(외부화). 타임아웃·연결 실패 → `MattermostUnavailableException`→**503**(빠른 실패). |
 | **M-NEW-3** 알림 고아 데이터 | 🟡 | ✅ | C-NEW-1 삭제 경로에서 `notificationRepository.deleteByPostId`로 함께 정리. |
@@ -140,10 +140,10 @@
 - `MattermostClient`가 `new RestTemplate()`을 **타임아웃 없이** 사용 → MM 지연 시 로그인 스레드 무한 대기 → 서블릿 스레드 고갈 → 전체 장애 전파.
 - **제안**: connect/read 타임아웃 설정(`ClientHttpRequestFactory`/`RestClient`), 실패 시 빠른 503, 가능하면 서킷 브레이커.
 
-### H-NEW-4. 🔴/🟠 리포지토리 위생 — `node_modules`·IDE 파일이 git에 커밋됨
-- `git ls-files frontend/node_modules` → **3,919개 파일이 추적 중**. `.gitignore`에 `node_modules/`가 있으나 **이미 커밋된 뒤라 무효**. `backend/.idea/*`(`misc.xml`, `gradle.xml`, `*.iml` 등)도 추적 중.
-- **영향**: 저장소 비대화, 무의미한 diff 폭증(이번 변경의 대부분이 node_modules 노이즈), 머지 충돌, 빌드 재현성 저하, OS별 줄바꿈(CRLF) 경고 다발.
-- **제안**: `git rm -r --cached frontend/node_modules backend/.idea` 후 커밋. `package-lock.json`만 추적. 루트의 `package-lock.json`(빈/오인 생성 추정)도 정리.
+### H-NEW-4. 리포지토리 위생 — `node_modules`·IDE 파일이 git에 커밋됨 — ✅ 해결(커밋·푸시 완료)
+- ~~`git ls-files frontend/node_modules` → 3,919개 파일이 추적 중. `.gitignore`에 `node_modules/`가 있으나 이미 커밋된 뒤라 무효. `backend/.idea/*`도 추적 중.~~
+- **영향(당시)**: 저장소 비대화, 무의미한 diff 폭증, 머지 충돌, 빌드 재현성 저하, CRLF 경고 다발.
+- **반영(2026-06-01)**: `git rm -r --cached frontend/node_modules .idea backend/.idea` + Figma mock 제거 + 루트 고아 `package-lock.json` 정리 → `83df359`로 커밋, `origin/main` 푸시. **추적 파일 ~4,000 → 137개**, 추적-but-ignore 0건. `package-lock.json`(frontend)만 정상 추적.
 
 ### M-NEW-1. (1차 M-3) PENDING 유저 라우팅 가드 — ✅ Phase C 반영
 - ~~`PrivateRoute`는 `!user`만 검사하고 `user.status`를 보지 않아 PENDING 유저가 `/feed` 직접 접근 시 빈 화면.~~
@@ -201,7 +201,7 @@
 | 1 | **관리자 영구 삭제 FK 정리**(하드삭제 + 자식 정리) | 🔴 | ✅ Phase A | `PostService.deletePost` |
 | 2 | **로그인 레이트리밋** | 🔴 | ✅ Phase A | `LoginRateLimiter`, `AuthController` |
 | 3 | **CORS 오리진 외부화**(운영 도메인 미설정 시 전 API 차단) | 🔴 | ✅ Phase A | `SecurityConfig`, `app.cors.allowed-origins` |
-| 4 | **node_modules·.idea git 추적 제거** | 🟠 | ✅ Phase A(스테이징) | 리포 전반, `.gitignore` |
+| 4 | **node_modules·.idea git 추적 제거** | 🟠 | ✅ Phase A(커밋·푸시 완료 `83df359`) | 리포 전반, `.gitignore` |
 | 5 | **입력 길이 `@Size` 추가**(긴 제목 500 방지) | 🟠 | ✅ Phase A | `dto/*Request.java` |
 | 6 | **MM 호출 타임아웃** | 🟠 | ✅ Phase A | `MattermostClient` |
 | 7 | **토큰 계정 상태 재검증**(DB `UserStatus` 재확인) | 🟠 | ✅ Phase B | `JwtAuthFilter` |

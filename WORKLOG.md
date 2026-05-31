@@ -4,6 +4,7 @@
 분석/계획 문서는 [MoreDevelopments.md](./MoreDevelopments.md)(1차) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md)(2차)이며, 본 문서는 **무엇을 실제로 구현했는지**를 한곳에 모은 진행 현황입니다.
 
 - 최종 업데이트: 2026-06-01
+- Git: **Phase A~D 커밋·푸시 완료**(`origin/main` — `83df359` 저장소 위생 + `9a3bd3e` Phase A~D)
 - 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅** 완료 · **Phase D 🔄 Flyway 제외 완료**(M-NEW-5 조회수·삭제 통합 테스트·관측성) → **남은 것: Phase D의 M-NEW-7(Flyway)·테스트 폭 + Phase E/§6 기능**
 - 운영 완성도 추이: 1차 65~70% → Phase 0 후 70~75% → Phase A·B 후 배포 가능 → Phase C 후 UX/정책 마감 → **Phase D(운영품질) 반영 중(약 88~90%)**
 - 작업 범위 원칙: **리뷰 반영 수정은 영구**(롤백 마커 없음). **기능 확장(§6)은 롤백 용이하도록 마커**(아래 [롤백 마커 규약](#롤백-마커-규약)) — Phase 0/A/B는 전부 수정이라 마커 미사용.
@@ -43,7 +44,7 @@
 | **M-NEW-2** CORS 외부화 | 🔴 | `app.cors.allowed-origins`(콤마 구분) 프로퍼티로 외부화 | `security/SecurityConfig`, `resources/application.yml` |
 | **H-NEW-1** 입력 길이 `@Size` | 🟠 | 제목≤200/본문≤10000/댓글≤1000/건의 본문≤5000/온보딩 각≤20 → 위반 시 400 | `dto/{PostCreate,PostUpdate,CommentCreate,Feedback,Onboarding}Request` |
 | **H-NEW-3** MM 호출 타임아웃 | 🟠 | `RestTemplate` connect(3s)/read(5s) 타임아웃 + 실패 시 503 | (신규) `exception/MattermostUnavailableException`; `client/MattermostClient`, `exception/GlobalExceptionHandler` |
-| **H-NEW-4** 리포 위생 | 🟠 | `git rm -r --cached frontend/node_modules .idea backend/.idea`(3,937개 추적 해제, 작업트리 보존) + `.gitignore` blanket `.idea/`. **스테이징만 — 커밋 미실행** | 리포 전반, `.gitignore` |
+| **H-NEW-4** 리포 위생 | 🟠 | `git rm -r --cached frontend/node_modules .idea backend/.idea`(3,937개 추적 해제, 작업트리 보존) + `.gitignore` blanket `.idea/`. **2026-06-01 커밋·푸시 완료**(`83df359` — Figma mock 81개·루트 고아 `package-lock.json` 정리 동반, 추적 파일 ~4,000→137) | 리포 전반, `.gitignore` |
 | **M-NEW-3** 알림 고아 데이터 | 🟡 | C-NEW-1 삭제 경로에서 `notificationRepository.deleteByPostId`로 함께 정리 | `repository/NotificationRepository` |
 
 **기록 문서**: `MoreDevelopments_V2.md` 상단 Phase A 섹션.
@@ -138,7 +139,7 @@
 1. **`JWT_SECRET`은 32바이트 이상**이어야 기동됨(HS256 256bit). 짧으면 부팅 단계에서 명확한 메시지로 실패.
 2. **운영 배포 시 `APP_CORS_ALLOWED_ORIGINS`에 실제 프론트 도메인**을 반드시 지정.
 3. **최초 관리자**: `APP_ADMIN_BOOTSTRAP_USERNAMES`에 MM **username**(loginId/email 아님) 지정 → 해당 계정이 로그인하면 ADMIN 승격(로그인 시점).
-4. **H-NEW-4 추적 해제는 스테이징 상태**(`git rm --cached`, 작업트리 파일 보존). `git status` 검토 후 커밋 필요. 소스 변경분은 unstaged 상태.
+4. **H-NEW-4 리포 위생 — 커밋·푸시 완료**(2026-06-01): node_modules·.idea 추적 해제 + Figma mock 제거를 `83df359`(위생) / Phase A~D 소스를 `9a3bd3e`로 분리 커밋해 `origin/main` 반영. 작업트리의 node_modules는 보존(ignore됨).
 5. **계정 휴면/탈퇴 시** 해당 계정의 기존 토큰은 즉시 거부됨(H-NEW-2, 의도된 동작).
 6. **헬스체크(Phase D)**: `GET /actuator/health`는 **인증 없이 공개**(LB/오케스트레이터 프로브용). 상세 컴포넌트는 인증 시에만 노출. `liveness`/`readiness` 프로브는 `/actuator/health/{liveness,readiness}`.
 7. 🔴 **prod 스키마 델타(배포 전 필수)**: prod는 `ddl-auto: validate`라 엔티티가 요구하는 테이블/컬럼이 **없으면 기동 실패**한다. Flyway 미도입 상태이므로 **배포 전 수동 DDL**로 반영(dev는 `update`라 자동 생성). → 스크립트·절차: **`backend/db/migration/2026-06-01_phase_c_d_schema_delta.sql`** + `backend/db/README.md`.
@@ -162,4 +163,4 @@
 - 코드 블록을 주석 마커로 감싼다: `// [FEATURE:기능명] … // [/FEATURE:기능명]`
 - 루트 `FEATURES.md`에 기능명·파일·범위·롤백 절차를 인덱싱 → 마커 검색만으로 일괄 제거 가능.
 
-> 참고: 실제 연동 프론트는 `frontend/src`이며, `frontend/사내 블라인드 웹 어플리케이션`은 Figma export mock(작업 대상 아님).
+> 참고: 실제 연동 프론트는 `frontend/src`(유일한 프론트엔드)입니다. 디자인 참고용 Figma export mock(`frontend/사내 블라인드 웹 어플리케이션`)은 2026-06-01 저장소에서 제거(`83df359`) — git 이력에는 남아 있음.
