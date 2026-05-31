@@ -6,6 +6,7 @@
 - 최종 업데이트: 2026-06-01
 - Git: **Phase A~D 커밋·푸시 완료**(`origin/main` — `83df359` 저장소 위생 + `9a3bd3e` Phase A~D)
 - 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅** 완료 · **Phase D 🔄 Flyway 제외 완료**(M-NEW-5 조회수·삭제 통합 테스트·관측성) → **남은 것: Phase D의 M-NEW-7(Flyway)·테스트 폭 + Phase E/§6 기능**
+- 🗓️ **다음 예정(2026-06-02)**: Access/Refresh 토큰 분리 — 짧은 Access(30m, stateless) + DB 저장 Refresh(긴 수명) + 만료 정리 스케줄러. *(설계만 문서화, 코드 미반영 — 아래 "다음 예정" 및 V2 설계 섹션)*
 - 운영 완성도 추이: 1차 65~70% → Phase 0 후 70~75% → Phase A·B 후 배포 가능 → Phase C 후 UX/정책 마감 → **Phase D(운영품질) 반영 중(약 88~90%)**
 - 작업 범위 원칙: **리뷰 반영 수정은 영구**(롤백 마커 없음). **기능 확장(§6)은 롤백 용이하도록 마커**(아래 [롤백 마커 규약](#롤백-마커-규약)) — Phase 0/A/B는 전부 수정이라 마커 미사용.
 
@@ -100,7 +101,7 @@
 
 | 항목 | 사유 | 출처 |
 |---|---|---|
-| 토큰 폐기 — **전체 Refresh 토큰 + Access 단축 + tokenVersion** | 탈퇴/휴면 즉시 무효화(실질적 폐기)는 H-NEW-2로 달성. 임의 세션 폐기("모든 기기 로그아웃")용 Refresh 회전은 프론트 변경 동반 → 별도 작업, 우선순위 낮음(MM-프록시 인증) | Phase B |
+| 토큰 폐기 — **Access 단축 + Refresh DB 저장** | 탈퇴/휴면 즉시 무효화(실질적 폐기)는 H-NEW-2로 달성. **→ 🔜 2026-06-02 구현 예정**(설계 문서화 완료, 아래 "다음 예정" 참조) | Phase B |
 | ~~**M-NEW-5/M-2** 조회수 서버단 중복제거~~ → ✅ **Phase D 완료** | 작성자 제외 + 24h dedup(`PostView`)로 서버단 정식 처리 | V2 §3 |
 | ~~삭제 **통합 테스트**(@DataJpaTest 실제 FK)~~ → ✅ **Phase D 완료** | `PostDeletionIntegrationTest`로 실 FK 회귀 검증 | V2 §8 |
 
@@ -109,6 +110,14 @@
 ## 🔜 남은 작업
 
 > Phase D는 Flyway 제외 완료(M-NEW-5·삭제 통합 테스트·관측성). 남은 것은 아래.
+
+### 🗓️ 다음 예정 (2026-06-02) — Access/Refresh 토큰 분리 + Refresh DB 저장
+- **Access Token**: stateless JWT, **30분**, DB 미저장(HttpOnly 쿠키).
+- **Refresh Token**: **DB 저장**(`refresh_tokens`, 해시 저장), 긴 수명(예 14일), path 한정 쿠키. `/api/auth/refresh`로 AT 재발급(+회전 권장).
+- **만료 정리 스케줄러**: `@EnableScheduling` + `@Scheduled` 벌크 `DELETE`로 만료 RT 주기 정리(테이블 비대화 방지).
+- 로그아웃/탈퇴/휴면 시 RT 삭제 → H-NEW-2(요청마다 DB 상태 재검증)와 결합해 완전 무효화.
+- 동반: 프론트 axios refresh 인터셉터, `refresh_tokens` 수동 DDL(`backend/db`, prod `validate` 대비).
+- **상세 설계/체크리스트**: `MoreDevelopments_V2.md` 「(예정) Access/Refresh 토큰 분리」 섹션. *(현재는 설계 문서화만 — 코드 미반영)*
 
 ### Phase D 잔여 — 운영 품질
 - **M-NEW-7 Flyway**(결정 필요): 실 MySQL로 베이스라인 생성·검증 가능한 환경에서 도입. prod=`validate`라 스키마 정합 필수.

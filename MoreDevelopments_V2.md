@@ -49,7 +49,7 @@
 | **JWT_SECRET 길이 검증** | 🟡 | ✅ | `JwtProvider`를 생성자 주입으로 전환 — **256bit(32byte) 미만이면 기동 시 `IllegalStateException`**(fail-fast). 서명 키 1회 생성. |
 | **M-NEW-6** 최초 ADMIN 부트스트랩 | 🟡 | ✅ | `app.admin.bootstrap-usernames`(콤마 구분 MM username) 지정 계정을 **로그인 시 ADMIN 승격**(`User.promoteToAdmin()`). `AuthServiceTest`에 승격/미승격 테스트 추가. |
 
-> ⏳ **토큰 폐기 — 전체 Refresh 토큰/Access 단축/tokenVersion은 이연**: H-NEW-2의 DB 상태 재검증으로 **탈퇴·휴면 시 즉시 무효화(실질적 폐기)는 이미 달성**. 임의 세션 폐기(예: "모든 기기 로그아웃")용 tokenVersion·짧은 Access+Refresh 회전은 프론트 변경을 동반하는 별도 작업이라 후속(필요 시)으로 분리. 현 MM-프록시 인증 특성상 우선순위 낮음.
+> 🔜 **토큰 폐기 — Access 단축 + Refresh DB 저장: 2026-06-02 구현 예정**: H-NEW-2의 DB 상태 재검증으로 **탈퇴·휴면 시 즉시 무효화(실질적 폐기)는 이미 달성**. 추가로 **짧은 Access(30m, stateless) + DB 저장 Refresh(긴 수명) + 만료 정리 스케줄러** 구조를 도입 예정. 상세 설계는 위 「(예정) Access/Refresh 토큰 분리」 섹션 참조.
 
 ---
 
@@ -77,6 +77,54 @@
 | **관측성** | 🟡 | ✅ | `spring-boot-starter-actuator` 도입 — `/actuator/health` 공개(LB/오케스트레이터 헬스체크, 상세는 `when_authorized`), liveness/readiness 프로브 활성. 그 외 엔드포인트는 비노출. `RequestIdFilter`(최우선)가 요청마다 `requestId`를 MDC·응답헤더(`X-Request-Id`)로 부여하고 로그 패턴에 `%X{requestId}` 추가(요청 추적). 전체 컨텍스트+보안 필터 체인 스모크 테스트(헬스 공개 200 / 보호 API 401)로 §8 보안 MockMvc 일부도 충족. |
 
 > ⏳ **M-NEW-7 Flyway는 보류 — 수동 DDL 스크립트 채택**: prod는 `ddl-auto: validate`라 Flyway가 생성/관리하는 스키마가 엔티티 매핑과 **정확히** 일치해야 기동된다. 현재 스키마는 Hibernate가 생성해 왔으므로 베이스라인 SQL을 손으로 작성하면 미세 불일치로 **prod 기동 실패** 위험이 크다. 그래서 지금은 **Phase C/D 스키마 델타만 명시적 SQL로 제공**(`backend/db/migration/2026-06-01_phase_c_d_schema_delta.sql` + `backend/db/README.md`)하여 배포 전 수동 적용으로 안전하게 언블록한다. **Flyway 전체 도입**은 실 MySQL에서 현재 스키마를 덤프해 V1 베이스라인을 생성·검증할 수 있을 때(테스트는 H2라 `spring.flyway.enabled=false`로 분리). 추가 테스트 폭(컨트롤러 슬라이스 @WebMvcTest, `CommentService` 단위)도 후속.
+
+---
+
+## 🔜 (예정 — 2026-06-02 구현) Access/Refresh 토큰 분리 · Refresh DB 저장 · 만료 정리 스케줄러
+
+> Phase B에서 이연한 "토큰 폐기(Refresh)" 항목을 실무 표준 구조로 도입 예정. **본 섹션은 설계만이며 코드는 미반영**(2026-06-01 기준).
+
+### 현재 → 목표
+- **현재**: 단일 JWT(24h, stateless)가 HttpOnly 쿠키에만 존재(사실상 Access Token). Refresh 없음. 폐기는 H-NEW-2(매 요청 DB `UserStatus` 재검증)로 탈퇴/휴면만 즉시 무효화 → Access 수명이 길어(24h) 탈취 노출 창이 크고 재발급/세션 폐기 흐름 부재.
+- **목표**: **짧은 Access(stateless) + DB 저장 Refresh(긴 수명)** 의 표준 2토큰 구조.
+
+### 토큰 설계
+| | Access Token | Refresh Token |
+|---|---|---|
+| 저장 | **DB 미저장**(stateless JWT) | **DB 저장**(`refresh_tokens`) |
+| 수명 | **30분** | 길게(예: **14일**) |
+| 쿠키 | HttpOnly `access_token`, path=`/` | HttpOnly `refresh_token`, **path=`/api/auth`로 한정**(일반 API엔 미전송) |
+| 값/claims | userId·status·role(현행 유지) | opaque 난수(32B secure random) — **원문 대신 SHA-256 해시로 DB 저장**(유출 대비) |
+| 검증 | JwtAuthFilter 재파싱 + DB 상태 재검증(H-NEW-2 유지) | `/api/auth/refresh`에서 DB 조회·만료·폐기 확인 |
+
+### 흐름
+- **로그인/온보딩**: AT(30m) + RT(DB 저장) 동시 발급, 쿠키 2개 세팅.
+- **재발급** `POST /api/auth/refresh`: refresh 쿠키 → DB 조회·검증 → 새 AT 발급. **회전(rotation) 권장**: RT도 1회용으로 교체 + 기존 폐기, 재사용 감지 시 해당 유저 RT 전체 폐기(탈취 대응).
+- **로그아웃**: 해당 RT를 DB 삭제 + 쿠키 2개 만료.
+- **탈퇴/휴면**: 유저의 모든 RT 삭제 → AT는 최대 30분 내 자연 만료 + RT 즉시 폐기 = 완전 무효화(H-NEW-2와 결합).
+
+### 엔티티 / 스키마
+- `RefreshToken` { id, userId(FK), tokenHash(unique), expiresAt, createdAt, (회전 시) revoked }.
+- 인덱스: `tokenHash`(유니크·조회), `expiresAt`(정리 스케줄러), `userId`(유저별 일괄 폐기).
+- prod=`validate`이므로 **`refresh_tokens` 테이블 수동 DDL 필요**(`backend/db`, Flyway 도입 전).
+
+### 만료 정리 스케줄러 — ✅ 필요함(질문 확인)
+- 회전/로그아웃으로 즉시 삭제되는 것 외에 **자연 만료된 RT가 DB에 누적**되므로 **주기적 일괄 삭제 잡이 필요**하다.
+- `@EnableScheduling` + `@Scheduled`(예: 매일 04:00) → 벌크 `DELETE FROM refresh_tokens WHERE expires_at < :now`(`@Modifying`).
+- 단일 인스턴스 전제(수평 확장 시 ShedLock 등으로 중복 실행 방지 고려).
+
+### 설정(예정 프로퍼티) / 프론트
+- `app.jwt.access-ttl`(기본 30m), `app.jwt.refresh-ttl`(기본 14d), `app.refresh-cleanup.cron`(기본 `0 0 4 * * *`).
+- 프론트 `api/client.js`: AT 401 → `/api/auth/refresh` 1회 호출 후 원요청 재시도, 실패 시 로그인. 동시 401은 단일 refresh로 큐잉.
+
+### 구현 체크리스트(2026-06-02)
+1. `RefreshToken` 엔티티 + 리포(`findByTokenHash`, `deleteByUserId`, `deleteByExpiresAtBefore`)
+2. 로그인/온보딩에서 AT(30m)+RT 발급, 쿠키 유틸 분리(access/refresh)
+3. `POST /api/auth/refresh`(+회전) · 로그아웃/탈퇴/휴면 시 RT 삭제
+4. AT 수명 30분 단축
+5. `@EnableScheduling` + 만료 정리 스케줄러
+6. 프론트 axios refresh 인터셉터
+7. 테스트(재발급/회전/만료/로그아웃 폐기) + `refresh_tokens` 수동 DDL(`backend/db`)
 
 ---
 
@@ -134,7 +182,7 @@
 ### H-NEW-2. (1차 H-2) 토큰의 계정 상태 재검증 — ✅ Phase B 반영
 - ~~`JwtAuthFilter`는 `PENDING`만 차단하고, 그 외에는 `findById`로 유저만 로드해 인증을 세팅 — `User.isEnabled()`(=ACTIVE 여부)를 호출하지 않음.~~
 - **반영(2026-06-01)**: `JwtAuthFilter`가 **DB의 현재 `UserStatus`로 재검증** — PENDING은 온보딩/`auth/me`만, ACTIVE만 통과, DORMANT/WITHDRAWN은 401. 탈퇴/휴면 후 탈취된 토큰 사본도 즉시 무효화.
-- **후속(이연)**: Access 토큰 단축 + Refresh, `tokenVersion`/블랙리스트(임의 세션 폐기)는 별도 작업. *(상태 재검증으로 탈퇴/휴면 즉시 폐기는 이미 달성.)*
+- **후속(🔜 2026-06-02 예정)**: Access 토큰 30분 단축 + Refresh DB 저장 + 만료 정리 스케줄러. 설계는 위 「(예정) Access/Refresh 토큰 분리」 섹션. *(상태 재검증으로 탈퇴/휴면 즉시 폐기는 이미 달성.)*
 
 ### H-NEW-3. (1차 H-4 미반영) Mattermost 호출 타임아웃 부재
 - `MattermostClient`가 `new RestTemplate()`을 **타임아웃 없이** 사용 → MM 지연 시 로그인 스레드 무한 대기 → 서블릿 스레드 고갈 → 전체 장애 전파.
@@ -307,7 +355,7 @@
 | 단계 | 목표 | 항목 | 비고 |
 |------|------|------|------|
 | **Phase A. 배포 차단 해소** | 배포 가능 상태 | C-NEW-1, C-NEW-2, M-NEW-2(CORS), H-NEW-1·3, H-NEW-4(리포 위생), M-NEW-3 | ✅ **완료 2026-06-01** (§5 1~6) |
-| **Phase B. 보안/계정 하드닝** | 안전성 | H-NEW-2(토큰 상태), JWT_SECRET 검증, M-NEW-6(최초 ADMIN) | ✅ **완료 2026-06-01** (토큰 폐기 전체 Refresh는 이연) |
+| **Phase B. 보안/계정 하드닝** | 안전성 | H-NEW-2(토큰 상태), JWT_SECRET 검증, M-NEW-6(최초 ADMIN) | ✅ **완료 2026-06-01** · Access/Refresh 분리는 🔜 **2026-06-02 구현 예정**(설계 문서화 완료) |
 | **Phase C. UX/정책 마감** | 사용성 | M-NEW-1(PENDING 가드), M-NEW-4(모달), 폰트(§4), §1-1 복원 후 재숨김 루프(`reviewed` 플래그) | ✅ **완료 2026-06-01** (임계값은 "5건째 숨김" 유지) |
 | **Phase D. 운영 품질** | 안정화 | M-NEW-5(조회수), M-NEW-7(Flyway), 관측성, 테스트(삭제 통합) | 🔄 **Flyway 제외 완료 2026-06-01** (M-NEW-5·삭제 통합·관측성). M-NEW-7은 실 MySQL 검증 환경에서 도입 |
 | **Phase E. 기능 확장** | 성장 | §6 기능 백로그(모더레이션·참여도·알림·개인화) | 소프트삭제는 Phase A와 함께 검토 |
