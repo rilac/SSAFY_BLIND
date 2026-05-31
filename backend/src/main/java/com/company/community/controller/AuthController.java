@@ -21,18 +21,19 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    // (#5) CookieUtils를 @Component로 변경했으므로 인스턴스 주입
+    private final CookieUtils cookieUtils;
 
     /**
      * POST /api/auth/login
-     * MM 인증 → JWT를 HttpOnly 쿠키로 세팅, Body에는 isNewUser만 반환
+     * MM 인증 → JWT를 HttpOnly 쿠키로 세팅
      */
     @PostMapping("/login")
     public ResponseEntity<Map<String, Boolean>> login(@Valid @RequestBody LoginRequest request) {
         LoginResponse result = authService.login(request.getLoginId(), request.getPassword());
 
-        // ★ CookieUtils로 쿠키 생성 (#2)
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, CookieUtils.createJwtCookie(result.getToken()).toString())
+                .header(HttpHeaders.SET_COOKIE, cookieUtils.createJwtCookie(result.getToken()).toString())
                 .body(Map.of("isNewUser", result.isNewUser()));
     }
 
@@ -43,14 +44,13 @@ public class AuthController {
     @PostMapping("/logout")
     public ResponseEntity<Void> logout() {
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, CookieUtils.createExpiredJwtCookie().toString())
+                .header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredJwtCookie().toString())
                 .build();
     }
 
     /**
      * GET /api/auth/me
-     * ★ 현재 로그인된 유저 정보 반환 — 프론트 인증 가드용 (#9)
-     * 쿠키가 없거나 유효하지 않으면 401 (JwtAuthFilter에서 처리)
+     * 현재 로그인된 유저 정보 반환 — 프론트 인증 가드용
      */
     @GetMapping("/me")
     public ResponseEntity<UserResponse> me(@AuthenticationPrincipal User user) {

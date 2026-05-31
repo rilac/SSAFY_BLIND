@@ -18,18 +18,17 @@ public class OnboardingService {
     private final JwtProvider jwtProvider;
 
     /**
-     * 온보딩 완료: 닉네임/부서 설정 → PENDING→ACTIVE 전환 → 새 JWT 발급
+     * 온보딩 완료: 닉네임/기수/캠퍼스 설정 → PENDING→ACTIVE 전환 → 새 JWT 발급
      */
     @Transactional
     public String completeOnboarding(Long userId, OnboardingRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new InvalidStateException("존재하지 않는 유저입니다."));
 
-        // ★ setter 대신 도메인 메서드 사용 (#8)
-        // 상태 검증 로직이 User 엔티티 내부에 캡슐화됨
-        user.completeOnboarding(request.getNickname(), request.getDepartment());
+        // 도메인 메서드로 상태 변경 — @Setter 사용 금지
+        user.completeOnboarding(request.getNickname(), request.getCohort(), request.getCampus());
 
-        // ACTIVE 상태가 반영된 새 JWT 발급
-        return jwtProvider.generateToken(user.getId(), UserStatus.ACTIVE);
+        // (#1) ACTIVE 상태 + 기존 role을 유지하여 새 JWT 발급
+        return jwtProvider.generateToken(user.getId(), UserStatus.ACTIVE, user.getRole());
     }
 }

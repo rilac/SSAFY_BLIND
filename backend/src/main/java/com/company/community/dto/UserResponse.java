@@ -1,6 +1,7 @@
 package com.company.community.dto;
 
 import com.company.community.domain.User;
+import com.company.community.domain.UserRole;
 import com.company.community.domain.UserStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -15,15 +16,21 @@ public class UserResponse {
 
     private Long id;
     private String nickname;
-    private String department;
+    private String cohort;
+    private String campus;
     private UserStatus status;
+
+    // (#1) Role 정보 추가 — 프론트에서 관리자 UI 분기에 사용
+    private UserRole role;
 
     public static UserResponse from(User user) {
         return new UserResponse(
                 user.getId(),
                 user.getNickname(),
-                user.getDepartment(),
-                user.getStatus()
+                user.getCohort(),
+                user.getCampus(),
+                user.getStatus(),
+                user.getRole()
         );
     }
 }

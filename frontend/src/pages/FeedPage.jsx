@@ -2,145 +2,250 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
+import Sidebar from '../components/Sidebar';
+import TopBar from '../components/TopBar';
+import PostCard from '../components/PostCard';
+import ReportModal from '../components/ReportModal';
+import { CATEGORY_LABELS } from '../lib/categories';
+
+const PAGE_SIZE = 20;
+
+function viewLabel(scope, category) {
+  if (scope === 'bookmarked') return '스크랩';
+  if (scope === 'mine') return '내가 쓴 글';
+  if (category === 'all') return '전체글';
+  return CATEGORY_LABELS[category] || '전체글';
+}
 
 export default function FeedPage() {
   const navigate = useNavigate();
-  const { logout } = useAuth();
+  const { user, logout } = useAuth();
+  const { darkMode, toggleDarkMode } = useTheme();
 
+  // 목록 상태
   const [posts, setPosts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [page, setPage] = useState(0);
   const [hasNext, setHasNext] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
 
-  // 최초 로드
+  // 필터 상태
+  const [category, setCategory] = useState('all'); // 'all' | enum
+  const [scope, setScope] = useState('all'); // all | mine | bookmarked
+  const [sort, setSort] = useState('latest'); // latest | popular
+  const [searchInput, setSearchInput] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+
+  // UI 상태
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+
+  // 신고 모달
+  const [reportTargetId, setReportTargetId] = useState(null);
+  const [reportSubmitting, setReportSubmitting] = useState(false);
+
+  // 검색 디바운스
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
+  // 필터 변경 시 첫 페이지부터 재조회
   useEffect(() => {
     fetchPosts(0, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [category, scope, sort, debouncedSearch]);
+
+  // 알림 최초 로드
+  useEffect(() => {
+    fetchNotifications();
   }, []);
 
-  /**
-   * 게시글 목록 조회 — 페이지네이션 (#10)
-   * @param pageNum 요청할 페이지 번호
-   * @param reset true면 목록 초기화 (최초 로드), false면 기존 목록에 추가 (더 보기)
-   */
-  const fetchPosts = async (pageNum, reset = false) => {
-    if (reset) setLoading(true);
-    else setLoadingMore(true);
+  const buildQuery = (pageNum) => {
+    const params = new URLSearchParams();
+    params.set('page', pageNum);
+    params.set('size', PAGE_SIZE);
+    params.set('sort', sort);
+    params.set('scope', scope);
+    if (category !== 'all') params.set('category', category);
+    if (debouncedSearch) params.set('keyword', debouncedSearch);
+    return params.toString();
+  };
 
+  const fetchPosts = async (pageNum, reset) => {
+    reset ? setLoading(true) : setLoadingMore(true);
     try {
-      const res = await api.get(`/posts?page=${pageNum}&size=20`);
+      const res = await api.get(`/posts?${buildQuery(pageNum)}`);
       const data = res.data;
-
-      if (reset) {
-        setPosts(data.content);
-      } else {
-        setPosts((prev) => [...prev, ...data.content]);
-      }
+      setPosts((prev) => (reset ? data.content : [...prev, ...data.content]));
       setPage(data.currentPage);
       setHasNext(data.hasNext);
     } catch (err) {
       console.error('게시글 목록 조회 실패', err);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      reset ? setLoading(false) : setLoadingMore(false);
     }
   };
 
-  // "더 보기" 버튼 클릭
-  const handleLoadMore = () => {
-    fetchPosts(page + 1, false);
+  const fetchNotifications = async () => {
+    try {
+      const res = await api.get('/notifications');
+      setNotifications(res.data);
+    } catch {
+      /* 알림 조회 실패는 조용히 무시 */
+    }
   };
 
-  // 로그아웃 — AuthContext의 logout 사용
+  const handleToggleBookmark = async (id) => {
+    try {
+      const res = await api.post(`/posts/${id}/bookmark`);
+      const { bookmarked } = res.data;
+      // 스크랩 뷰에서 해제하면 목록에서 제거, 그 외엔 상태만 갱신
+      if (scope === 'bookmarked' && !bookmarked) {
+        setPosts((prev) => prev.filter((p) => p.id !== id));
+      } else {
+        setPosts((prev) => prev.map((p) => (p.id === id ? { ...p, isBookmarked: bookmarked } : p)));
+      }
+    } catch {
+      alert('스크랩 처리에 실패했습니다.');
+    }
+  };
+
+  const submitReport = async (reason) => {
+    setReportSubmitting(true);
+    try {
+      await api.post(`/posts/${reportTargetId}/report`, { reason });
+      setReportTargetId(null);
+      alert('신고가 접수되었습니다.');
+    } catch {
+      alert('신고 처리에 실패했습니다.');
+    } finally {
+      setReportSubmitting(false);
+    }
+  };
+
+  const handleSelectCategory = (c) => {
+    setScope('all');
+    setCategory(c);
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  // 상대 시간 포맷팅
-  const formatTime = (dateStr) => {
-    const now = new Date();
-    const date = new Date(dateStr);
-    const diff = Math.floor((now - date) / 1000);
+  // 알림 핸들러
+  const handleNotificationClick = async (n) => {
+    try {
+      await api.patch(`/notifications/${n.id}/read`);
+    } catch {
+      /* ignore */
+    }
+    setNotifications((prev) => prev.map((x) => (x.id === n.id ? { ...x, isRead: true } : x)));
+    setNotificationsOpen(false);
+    if (n.postId) navigate(`/posts/${n.postId}`);
+  };
 
-    if (diff < 60) return '방금 전';
-    if (diff < 3600) return `${Math.floor(diff / 60)}분 전`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)}시간 전`;
-    if (diff < 2592000) return `${Math.floor(diff / 86400)}일 전`;
-    return date.toLocaleDateString('ko-KR');
+  const handleMarkAllRead = async () => {
+    try {
+      await api.post('/notifications/read-all');
+    } catch {
+      /* ignore */
+    }
+    setNotifications((prev) => prev.map((x) => ({ ...x, isRead: true })));
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6">
-      {/* 헤더 */}
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold text-gray-800">익명 피드</h1>
-        <button
-          onClick={handleLogout}
-          className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          로그아웃
-        </button>
+    <div className="h-screen w-full bg-background text-foreground flex overflow-hidden">
+      <Sidebar
+        sidebarOpen={sidebarOpen}
+        category={category}
+        scope={scope}
+        user={user}
+        userMenuOpen={userMenuOpen}
+        onSelectCategory={handleSelectCategory}
+        onSelectScope={setScope}
+        onToggleUserMenu={() => setUserMenuOpen((o) => !o)}
+        onOpenSettings={() => navigate('/settings')}
+        onLogout={handleLogout}
+        onHome={() => navigate('/feed')}
+        onFeedback={() => navigate('/feedback')}
+        onAdmin={() => navigate('/admin')}
+      />
+
+      <div className="flex-1 flex flex-col overflow-hidden">
+        <TopBar
+          sidebarOpen={sidebarOpen}
+          searchValue={searchInput}
+          darkMode={darkMode}
+          notifications={notifications}
+          notificationsOpen={notificationsOpen}
+          sortBy={sort}
+          onToggleSidebar={() => setSidebarOpen((o) => !o)}
+          onSearchChange={setSearchInput}
+          onToggleDarkMode={toggleDarkMode}
+          onNewPost={() => navigate('/posts/new')}
+          onToggleNotifications={() => setNotificationsOpen((o) => !o)}
+          onNotificationClick={handleNotificationClick}
+          onMarkAllRead={handleMarkAllRead}
+          onSortChange={setSort}
+        />
+
+        <main className="flex-1 overflow-y-auto">
+          <div className="max-w-4xl mx-auto p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-mono">{viewLabel(scope, category)}</h2>
+              {debouncedSearch && (
+                <span className="text-xs font-mono text-muted-foreground">SEARCH: "{debouncedSearch}"</span>
+              )}
+            </div>
+
+            {loading ? (
+              <p className="text-sm font-mono text-muted-foreground py-12 text-center">불러오는 중...</p>
+            ) : posts.length === 0 ? (
+              <div className="border border-border bg-card p-12 text-center">
+                <p className="text-sm font-mono text-muted-foreground">표시할 게시글이 없습니다</p>
+              </div>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  {posts.map((post) => (
+                    <PostCard
+                      key={post.id}
+                      post={post}
+                      onOpen={(id) => navigate(`/posts/${id}`)}
+                      onToggleBookmark={handleToggleBookmark}
+                      onReport={setReportTargetId}
+                    />
+                  ))}
+                </div>
+
+                {hasNext && (
+                  <div className="mt-8 pt-6 border-t border-border">
+                    <button
+                      onClick={() => fetchPosts(page + 1, false)}
+                      disabled={loadingMore}
+                      className="w-full py-3 border border-border hover:border-primary text-sm font-mono transition-colors disabled:opacity-50"
+                    >
+                      {loadingMore ? '불러오는 중...' : 'LOAD_MORE_POSTS'}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </main>
       </div>
 
-      {/* 게시글 목록 */}
-      {loading ? (
-        <div className="text-center py-12 text-gray-400 text-sm">불러오는 중...</div>
-      ) : posts.length === 0 ? (
-        <div className="bg-white rounded-xl shadow-sm p-8 text-center">
-          <p className="text-gray-400 text-sm">
-            아직 게시글이 없습니다. 첫 번째 글을 작성해보세요!
-          </p>
-        </div>
-      ) : (
-        <>
-          <div className="space-y-3">
-            {posts.map((post) => (
-              <div
-                key={post.id}
-                onClick={() => navigate(`/posts/${post.id}`)}
-                className="bg-white rounded-xl shadow-sm p-5 cursor-pointer
-                           hover:shadow-md transition-shadow border border-gray-100"
-              >
-                <h2 className="text-base font-semibold text-gray-800 mb-2 line-clamp-1">
-                  {post.title}
-                </h2>
-                <div className="flex items-center gap-3 text-xs text-gray-400">
-                  <span>조회 {post.viewCount}</span>
-                  <span>댓글 {post.commentCount}</span>
-                  <span>{formatTime(post.createdAt)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* ★ "더 보기" 버튼 — hasNext가 false면 숨김 (#10) */}
-          {hasNext && (
-            <div className="text-center mt-6">
-              <button
-                onClick={handleLoadMore}
-                disabled={loadingMore}
-                className="px-6 py-2.5 text-sm text-blue-600 bg-white border border-blue-200
-                           rounded-lg hover:bg-blue-50 transition-colors
-                           disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loadingMore ? '불러오는 중...' : '더 보기'}
-              </button>
-            </div>
-          )}
-        </>
-      )}
-
-      {/* 글 쓰기 플로팅 버튼 */}
-      <button
-        onClick={() => navigate('/posts/new')}
-        className="fixed bottom-6 right-6 w-14 h-14 bg-blue-600 text-white rounded-full
-                   shadow-lg hover:bg-blue-700 transition-colors flex items-center justify-center
-                   text-2xl font-light"
-        title="글 쓰기"
-      >
-        +
-      </button>
+      <ReportModal
+        open={reportTargetId !== null}
+        onClose={() => setReportTargetId(null)}
+        onSubmit={submitReport}
+        submitting={reportSubmitting}
+      />
     </div>
   );
 }

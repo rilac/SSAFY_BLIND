@@ -1,6 +1,9 @@
 package com.company.community.dto;
 
 import com.company.community.domain.Post;
+import com.company.community.domain.PostCategory;
+import com.company.community.domain.User;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -11,19 +14,43 @@ import java.time.LocalDateTime;
 public class PostListResponse {
 
     private Long id;
+    private PostCategory category;
+    // 가명 작성자 정보(닉네임·기수·지역). 실제 신원은 미포함.
+    private AuthorInfo author;
     private String title;
     private int viewCount;
     private int commentCount;
     private LocalDateTime createdAt;
 
-    // ★ 목록에서도 작성자 노출 금지
-    public static PostListResponse of(Post post, long commentCount) {
+    // (#3) isMine — 목록에서도 본인 글 표시
+    @JsonProperty("isMine")
+    private boolean isMine;
+
+    // (#4) 좋아요 정보
+    @JsonProperty("isLiked")
+    private boolean isLiked;
+
+    private long likeCount;
+
+    // 스크랩 여부
+    @JsonProperty("isBookmarked")
+    private boolean isBookmarked;
+
+    // ★ 가명(닉네임·기수·지역)만 노출. author는 호출부에서 배치 조회한 작성자 User.
+    public static PostListResponse of(Post post, long commentCount, Long currentUserId,
+                                      boolean isLiked, long likeCount, boolean isBookmarked, User author) {
         return new PostListResponse(
                 post.getId(),
+                post.getCategory(),
+                AuthorInfo.of(author),
                 post.getTitle(),
                 post.getViewCount(),
                 (int) commentCount,
-                post.getCreatedAt()
+                post.getCreatedAt(),
+                post.getAuthor().getId().equals(currentUserId),
+                isLiked,
+                likeCount,
+                isBookmarked
         );
     }
 }

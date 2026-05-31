@@ -11,6 +11,9 @@ public class OnboardingRequest {
     @NotBlank(message = "닉네임을 입력해주세요.")
     private String nickname;
 
-    @NotBlank(message = "부서를 입력해주세요.")
-    private String department;
+    @NotBlank(message = "기수를 선택해주세요.")
+    private String cohort;
+
+    @NotBlank(message = "캠퍼스를 선택해주세요.")
+    private String campus;
 }

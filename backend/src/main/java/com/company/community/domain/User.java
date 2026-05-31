@@ -13,7 +13,7 @@ import java.util.List;
 
 @Entity
 @Table(name = "users")
-@Getter                    // ★ @Setter 제거 — 상태 변경은 도메인 메서드로만 (#8)
+@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @AllArgsConstructor
 @Builder
@@ -32,32 +32,70 @@ public class User implements UserDetails {
 
     private String nickname;
 
-    private String department;
+    // 온보딩에서 수집 — 본인 프로필(사이드바/설정)에만 노출, 게시글엔 비노출(익명)
+    private String cohort;   // 기수
+
+    private String campus;   // 캠퍼스
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private UserStatus status;
 
+    // (#1) Role 시스템 — 신규 유저는 기본적으로 USER 권한
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private UserRole role = UserRole.USER;
+
     @Column(nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 
-    // ★ 도메인 메서드: 온보딩 완료 처리 (#8)
-    // 상태 검증 + 닉네임/부서 설정 + ACTIVE 전환을 원자적으로 수행
-    public void completeOnboarding(String nickname, String department) {
+    // (#1) 온보딩 완료 도메인 메서드 — @Setter 사용 금지
+    public void completeOnboarding(String nickname, String cohort, String campus) {
         if (this.status != UserStatus.PENDING) {
             throw new InvalidStateException("이미 온보딩을 완료한 유저입니다.");
         }
         this.nickname = nickname;
-        this.department = department;
+        this.cohort = cohort;
+        this.campus = campus;
         this.status = UserStatus.ACTIVE;
+    }
+
+    // 휴면 전환 — ACTIVE 상태에서만 가능
+    public void goDormant() {
+        if (this.status != UserStatus.ACTIVE) {
+            throw new InvalidStateException("활성 상태의 계정만 휴면 전환할 수 있습니다.");
+        }
+        this.status = UserStatus.DORMANT;
+    }
+
+    // 재로그인 시 휴면 → 활성 복구 (그 외 상태는 변화 없음)
+    public void reactivateIfDormant() {
+        if (this.status == UserStatus.DORMANT) {
+            this.status = UserStatus.ACTIVE;
+        }
+    }
+
+    // 회원 탈퇴 — PII 익명화 + 재로그인 매칭 불가 처리. 게시글/댓글은 FK 보존.
+    public void withdraw() {
+        this.nickname = null;
+        this.email = null;
+        this.mmUsername = null;
+        this.cohort = null;
+        this.campus = null;
+        // 동일 MM 계정으로 재로그인 시 이 행에 매칭되지 않도록 토큰으로 치환 → 신규 가입 처리됨
+        this.mmUserId = "withdrawn-" + this.id;
+        this.status = UserStatus.WITHDRAWN;
     }
 
     // --- UserDetails 구현 ---
 
+    // (#1) role에 따라 ROLE_USER 또는 ROLE_ADMIN 반환
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of(new SimpleGrantedAuthority("ROLE_USER"));
+        String authority = (this.role == UserRole.ADMIN) ? "ROLE_ADMIN" : "ROLE_USER";
+        return List.of(new SimpleGrantedAuthority(authority));
     }
 
     @Override

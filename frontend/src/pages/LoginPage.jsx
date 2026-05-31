@@ -3,101 +3,80 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 
+// Mattermost 로그인 — 데모 디자인 + 실제 /auth/login
 export default function LoginPage() {
   const navigate = useNavigate();
   const { refreshUser } = useAuth();
-  const [form, setForm] = useState({ loginId: '', password: '' });
+  const [loginId, setLoginId] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError('');
     setLoading(true);
-
     try {
-      const res = await api.post('/auth/login', form);
-      // ★ 서버가 Set-Cookie로 JWT를 내려줌 — localStorage 불필요
-      const { isNewUser } = res.data;
-
-      // ★ AuthContext 상태 갱신 (#9)
+      const res = await api.post('/auth/login', { loginId, password });
       await refreshUser();
-
-      if (isNewUser) {
-        navigate('/onboarding');
-      } else {
-        navigate('/feed');
-      }
+      navigate(res.data.isNewUser ? '/onboarding' : '/feed');
     } catch (err) {
-      const msg = err.response?.data?.message || '로그인에 실패했습니다.';
-      setError(msg);
+      setError(err.response?.data?.message || '로그인에 실패했습니다.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="w-full max-w-sm p-8 bg-white rounded-2xl shadow-lg">
-        <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">
-          사내 익명 커뮤니티
-        </h1>
-        <p className="text-sm text-center text-gray-500 mb-8">
-          Mattermost 계정으로 로그인하세요
-        </p>
+    <div className="min-h-screen w-full bg-background text-foreground flex items-center justify-center p-6">
+      <div className="w-full max-w-md">
+        <div className="mb-8 text-center">
+          <h1 className="text-3xl font-mono tracking-tight mb-2">SSAFY_BLIND</h1>
+          <p className="text-sm font-mono text-muted-foreground">INTERNAL_COMMUNITY_v1.0</p>
+        </div>
 
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Mattermost ID
-            </label>
-            <input
-              type="text"
-              name="loginId"
-              value={form.loginId}
-              onChange={handleChange}
-              placeholder="아이디 입력"
-              required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                         text-sm"
-            />
+        <form onSubmit={handleLogin} className="border border-border bg-card p-8">
+          <h2 className="text-lg font-mono mb-6">Mattermost 로그인</h2>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-mono mb-2">Mattermost ID</label>
+              <input
+                type="text"
+                value={loginId}
+                onChange={(e) => setLoginId(e.target.value)}
+                placeholder="your.id@ssafy.com"
+                required
+                className="w-full h-12 px-4 bg-input-background border border-border text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-mono mb-2">비밀번호</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+                className="w-full h-12 px-4 bg-input-background border border-border text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              비밀번호
-            </label>
-            <input
-              type="password"
-              name="password"
-              value={form.password}
-              onChange={handleChange}
-              placeholder="비밀번호 입력"
-              required
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-lg
-                         focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
-                         text-sm"
-            />
-          </div>
-
-          {error && (
-            <p className="text-sm text-red-500 text-center">{error}</p>
-          )}
+          {error && <p className="text-sm text-destructive font-mono mt-4 text-center">{error}</p>}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-2.5 bg-blue-600 text-white rounded-lg font-medium
-                       hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed
-                       text-sm"
+            className="w-full h-12 bg-primary text-primary-foreground font-mono text-sm mt-6 hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {loading ? '로그인 중...' : '로그인'}
           </button>
+
+          <p className="text-xs font-mono text-muted-foreground mt-4 text-center">
+            Mattermost 계정으로 인증됩니다
+          </p>
         </form>
       </div>
     </div>

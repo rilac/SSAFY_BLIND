@@ -1,3 +1,64 @@
+/* 데모(사내 블라인드) 디자인 시스템 — 브루탈리즘 + 스카이블루 */
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Work+Sans:wght@400;500;600&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root {
+  --background: #f0f8ff;
+  --foreground: #0a1929;
+  --card: #ffffff;
+  --card-foreground: #0a1929;
+  --popover: #ffffff;
+  --popover-foreground: #0a1929;
+  --primary: #0ea5e9;
+  --primary-foreground: #ffffff;
+  --secondary: #e0f2fe;
+  --secondary-foreground: #0a1929;
+  --muted: #e0f2fe;
+  --muted-foreground: #64748b;
+  --accent: #38bdf8;
+  --accent-foreground: #ffffff;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(14, 165, 233, 0.15);
+  --input: rgba(14, 165, 233, 0.1);
+  --input-background: #ffffff;
+  --ring: #0ea5e9;
+}
+
+.dark {
+  --background: #0a1929;
+  --foreground: #f1f5f9;
+  --card: #132337;
+  --card-foreground: #f1f5f9;
+  --popover: #132337;
+  --popover-foreground: #f1f5f9;
+  --primary: #38bdf8;
+  --primary-foreground: #0a1929;
+  --secondary: #1e3a52;
+  --secondary-foreground: #f1f5f9;
+  --muted: #1e3a52;
+  --muted-foreground: #94a3b8;
+  --accent: #38bdf8;
+  --accent-foreground: #0a1929;
+  --destructive: #ef4444;
+  --destructive-foreground: #ffffff;
+  --border: rgba(56, 189, 248, 0.15);
+  --input: rgba(56, 189, 248, 0.1);
+  --input-background: #0f2438;
+  --ring: #38bdf8;
+}
+
+@layer base {
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: 'Work Sans', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'JetBrains Mono', monospace;
+  }
+}

@@ -19,11 +19,12 @@ import java.util.Map;
 public class OnboardingController {
 
     private final OnboardingService onboardingService;
+    // (#5) CookieUtils를 @Component로 변경했으므로 인스턴스 주입
+    private final CookieUtils cookieUtils;
 
     /**
      * POST /api/onboarding
      * 닉네임/부서 입력 → ACTIVE JWT 쿠키 재발급
-     * ★ CookieUtils로 중복 코드 제거 (#2)
      */
     @PostMapping
     public ResponseEntity<Map<String, String>> completeOnboarding(
@@ -33,7 +34,7 @@ public class OnboardingController {
         String newToken = onboardingService.completeOnboarding(user.getId(), request);
 
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, CookieUtils.createJwtCookie(newToken).toString())
+                .header(HttpHeaders.SET_COOKIE, cookieUtils.createJwtCookie(newToken).toString())
                 .body(Map.of("message", "온보딩이 완료되었습니다."));
     }
 }
