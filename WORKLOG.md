@@ -4,8 +4,8 @@
 분석/계획 문서는 [MoreDevelopments.md](./MoreDevelopments.md)(1차) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md)(2차)이며, 본 문서는 **무엇을 실제로 구현했는지**를 한곳에 모은 진행 현황입니다.
 
 - 최종 업데이트: 2026-06-02
-- Git: **Phase 0~D + Access/Refresh + Flyway + Phase E 7기능 커밋·푸시 완료**(`origin/main` — 최신 `45a3567` + 본 동기화 커밋). Phase E 커밋: `2805f0f` markdown → `e2e6c17` qna-accept → `0ea272b` op-alias → `72667be` cohort-campus-lounge → `804ce98` docs-sync → `e3c3995` nested-comments(V3) → `2f1ef16` poll(V4) → `45a3567` unread-new(스키마 무변경). **Phase E 미커밋 없음.**
-- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway**) → **Phase E 진행 중**(✅ 마크다운 · ✅ Q&A 채택 · ✅ OP/익명 별칭 · ✅ 기수/캠퍼스 라운지 · ✅ 대댓글 · ✅ 익명 투표 · ✅ 읽음/새 글 배지(미커밋)) → **남은 것: §6 백로그(모더레이션 강화·리액션 등) + 테스트 폭**
+- Git: **Phase 0~D + Access/Refresh + Flyway + Phase E 7기능 + 후속 UX 버그픽스 커밋·푸시 완료**(`origin/main` — 최신 = 본 버그픽스 커밋). Phase E 커밋: `2805f0f` markdown → `e2e6c17` qna-accept → `0ea272b` op-alias → `72667be` cohort-campus-lounge → `804ce98` docs-sync → `e3c3995` nested-comments(V3) → `2f1ef16` poll(V4) → `45a3567` unread-new(스키마 무변경) → **후속 UX 버그픽스 3종**(라운지 카테고리 stuck·기수/캠퍼스 정리·설정 로그아웃 확인). **미커밋 없음.**
+- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway**) → **Phase E 7기능 완료**(✅ 마크다운 · ✅ Q&A 채택 · ✅ OP/익명 별칭 · ✅ 기수/캠퍼스 라운지 · ✅ 대댓글 · ✅ 익명 투표 · ✅ 읽음/새 글 배지) + **후속 UX 버그픽스 3종** → **남은 것: §6 백로그(모더레이션 강화·리액션 등) + 테스트 폭**
 - ✅ **Access/Refresh 토큰 분리 구현 완료(2026-06-02)**: 짧은 Access(30m, stateless) + DB 저장 Refresh(14d, `refresh_tokens`) + `/api/auth/refresh` 회전 재발급 + 만료 정리 스케줄러. 검증: backend `./gradlew.bat test` BUILD SUCCESSFUL, frontend `npm run build` 성공. *(아래 "✅ Refresh Token 도입" 섹션)*
 - ✅ **M-NEW-7 Flyway 도입 완료(2026-06-02)**: Hibernate가 생성한 `V1__baseline.sql`(=validate와 정확히 일치) + `baseline-on-migrate`로 기존/신규 DB 모두 안전 처리. dev/prod 모두 Flyway ON·`ddl-auto: validate`, 테스트(H2)는 Flyway OFF. **배포 전 수동 DDL 폐기.** *(아래 "✅ M-NEW-7 Flyway" 섹션)*
 - 운영 완성도 추이: 1차 65~70% → Phase 0 후 70~75% → Phase A·B 후 배포 가능 → Phase C 후 UX/정책 마감 → Phase D(운영품질)+Access/Refresh+Flyway 완료(약 92%) → **Phase E(기능 확장) 진행 중**
@@ -251,6 +251,15 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 
 **롤백**: `FEATURES.md`의 `unread-new` 절차(스키마/신규 파일 없음).
 **후속 후보**: 피드 노출만으로 읽음 처리, 마지막 방문 기준 "새 글 N개" 요약, 상세 페이지 읽음 표시.
+
+### Phase E 후속 — 사용자 보고 UX 버그픽스 3종 (2026-06-02)
+사용자 사용 중 보고된 불편 3건. **프론트 전용·영구 수정**(롤백 마커 없음). 검증: `npm run build` 성공.
+
+| # | 증상 | 원인 | 수정 |
+|---|---|---|---|
+| 1 (치명) | 라운지(우리 캠퍼스/동기)에서 일부 카테고리 글만 보이거나 빈 화면. 탭 전환 시 빈발 | `category` 선택은 `scope`를 all로 리셋했으나 **scope 선택은 직전 category를 안 건드려** 라운지에 stuck category가 필터로 남음(예: cohort+JOB만 조회) | `FeedPage`에 `handleSelectScope` 추가 — 스코프(라운지·내 글·스크랩) 선택 시 `category=all` 리셋. 라운지=모든 카테고리 독립 뷰로 통일 |
+| 2 | 기수/캠퍼스 목록 부정확 | 온보딩 목록이 옛 데이터(`11~14기`) | `OnboardingPage` 기수 `14·15·16기`로 정리, **16기는 노출·비활성**(클릭 시 AlertDialog "현재 모집중입니다. 추후에 업데이트 하겠습니다."), 캠퍼스 `서울·대전·광주·부울경·구미` 순 정리. 백엔드 무변경(문자열) |
+| 3 | `/settings` 로그아웃이 확인 없이 즉시 실행(`/feed`는 확인 모달) | 설정 페이지 로그아웃이 `handleLogout` 직접 호출 | `SettingsPage`에 `requestLogout`(ConfirmDialog "정말 로그아웃 하시겠습니까?") 경유로 통일 |
 
 ---
 

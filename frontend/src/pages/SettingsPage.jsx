@@ -69,6 +69,17 @@ export default function SettingsPage() {
     navigate('/login');
   };
 
+  // 피드와 동일하게 확인 모달을 거친 뒤 로그아웃(설정에서 즉시 로그아웃되던 동작 통일)
+  const requestLogout = () => {
+    setConfirmState({
+      title: '로그아웃',
+      message: '정말 로그아웃 하시겠습니까?',
+      confirmLabel: '로그아웃',
+      danger: true,
+      onConfirm: handleLogout,
+    });
+  };
+
   return (
     <div className="h-screen w-full bg-background text-foreground flex overflow-hidden">
       {/* Sidebar */}
@@ -92,7 +103,7 @@ export default function SettingsPage() {
             <span>메인으로 돌아가기</span>
           </button>
           <button
-            onClick={handleLogout}
+            onClick={requestLogout}
             className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-mono border border-transparent hover:border-border transition-colors text-destructive"
           >
             <LogOut size={16} />

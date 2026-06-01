@@ -153,6 +153,15 @@ export default function FeedPage() {
     setCategory(c);
   };
 
+  // (버그픽스) 스코프(라운지·내 글·스크랩) 선택 시 카테고리를 all로 리셋한다.
+  // 카테고리 선택은 scope를 all로 되돌렸지만 반대(scope 선택)는 카테고리를 안 건드려서,
+  // 직전 카테고리가 라운지(동기/우리 캠퍼스)에 그대로 필터로 남아 "특정 카테고리 글만 보이거나 빈 화면"이 됐다.
+  // 스코프는 '모든 카테고리'를 보는 독립 뷰이므로 선택 시 category=all로 통일한다.
+  const handleSelectScope = (s) => {
+    setCategory('all');
+    setScope(s);
+  };
+
   // 사이드바 로그아웃 클릭 → 즉시 로그아웃하지 않고 확인 모달을 연다(사용자 메뉴는 닫음).
   const requestLogout = () => {
     setUserMenuOpen(false);
@@ -196,7 +205,7 @@ export default function FeedPage() {
         user={user}
         userMenuOpen={userMenuOpen}
         onSelectCategory={handleSelectCategory}
-        onSelectScope={setScope}
+        onSelectScope={handleSelectScope}
         onToggleUserMenu={() => setUserMenuOpen((o) => !o)}
         onOpenSettings={() => navigate('/settings')}
         onLogout={requestLogout}
