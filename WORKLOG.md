@@ -18,15 +18,31 @@
 > 재개용 체크리스트. 상세는 각 섹션 참조. 현재 모든 작업트리 변경은 **검증 완료(테스트/빌드 통과)** 상태.
 
 1. ✅ **Phase E 8기능 + UX 버그픽스 전부 커밋·푸시 완료**(`origin/main` — reactions `cdd7d4d`, 본 계획 doc 커밋까지). 미커밋 없음.
-2. ⭐ **다음 기능 (확정 — 내일 바로 구현): 주간 인기글 다이제스트(weekly-digest)**. 스펙 확정 완료 → 상세는 아래 [🗓️ 계획 — 주간 인기글 다이제스트](#️-계획--주간-인기글-다이제스트-weekly-digest-내일-구현) 섹션. 착수 시 롤백 마커 `[FEATURE:weekly-digest]` + `FEATURES.md` 인덱싱. (그 다음 후보: 모더레이션 강화 / 북마크 폴더.)
-3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1~V5 자동 적용**(`flyway_schema_history`; `accepted_comment_id`·`parent_id`·`poll_*`·`post_likes.reaction_type`). op-alias·라운지·unread-new는 스키마 무변경. E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료). ⚠️ V4·V5는 수기 DDL이라 실 MySQL `validate` 최종 확인 권장(V5는 클론 테이블로 DDL 검증 완료).
+2. ✅ **주간 인기글 다이제스트(weekly-digest) 구현·검증 완료(2026-06-02), 미커밋**. 백엔드 전용(스키마 무변경, 프론트 무변경). 마커 `[FEATURE:weekly-digest]` + `FEATURES.md` 인덱싱 완료. 검증: backend `./gradlew test` BUILD SUCCESSFUL(신규 단위 4 + @DataJpaTest 4 포함 전체 통과). 상세는 아래 [🗓️ 주간 인기글 다이제스트](#️-계획--주간-인기글-다이제스트-weekly-digest-내일-구현) 섹션. **다음 후보: 모더레이션 강화 / 북마크 폴더.**
+3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1~V5 자동 적용**(`flyway_schema_history`; `accepted_comment_id`·`parent_id`·`poll_*`·`post_likes.reaction_type`). weekly-digest·op-alias·라운지·unread-new는 스키마 무변경. E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료). ⚠️ V4·V5는 수기 DDL이라 실 MySQL `validate` 최종 확인 권장(V5는 클론 테이블로 DDL 검증 완료). weekly-digest 실발송 수동 확인은 cron 임박 시각 설정 또는 `WeeklyDigestService.sendWeeklyDigest()` 직접 호출.
 4. **테스트 폭(여력 시)** — 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (CommentService 단위[채택·별칭·대댓글]·PostService 단위[scope]·PollService 단위·삭제 통합·라운지 @DataJpaTest·헬스/인가 스모크·RefreshTokenService는 완료)
 
 ---
 
-## 🗓️ 계획 — 주간 인기글 다이제스트 (weekly-digest, 내일 구현)
+## 🗓️ 주간 인기글 다이제스트 (weekly-digest) — ✅ 구현 완료(2026-06-02, 미커밋)
 
-§6-3/§6-5 C. **지난 7일 인기글 Top N을 매주 월요일 09:10에 자동 집계해 모든 ACTIVE 유저에게 앱 내 알림으로 발송.** 사용자와 스펙 확정 완료(2026-06-02). **아직 코드 미작성 — 내일 구현.** 마커 `[FEATURE:weekly-digest]` + `FEATURES.md`.
+§6-3/§6-5 C. **지난 7일 인기글 Top N을 매주 월요일 09:10에 자동 집계해 모든 ACTIVE 유저에게 앱 내 알림으로 발송.** 사용자와 스펙 확정(2026-06-02) → **구현·검증 완료**. 마커 `[FEATURE:weekly-digest]` + `FEATURES.md` 인덱싱 완료. 상세 마커/롤백은 `FEATURES.md`의 weekly-digest 섹션 참조.
+
+### 구현 결과(파일)
+- (신규) `scheduler/WeeklyDigestScheduler` — `@Scheduled(cron="${app.weekly-digest.cron:0 10 9 * * MON}")` → `WeeklyDigestService.sendWeeklyDigest()`(수신자>0이면 로그).
+- (신규) `service/WeeklyDigestService` — `@Transactional` `sendWeeklyDigest()`: 최근 7일 Top N(`@Value app.weekly-digest.top-n:5`) 조회 → 0건이면 스킵(0 반환) → ACTIVE 유저 전체 → 상위 3개 제목(각 30자 미리보기·255자 truncate)으로 메시지 구성 → 1위 글 링크로 `notifyDigest`.
+- `repository/PostRepository.findTopByScoreSince(since, Pageable)` — 점수=`viewCount + COUNT(DISTINCT pl)*2 + COUNT(DISTINCT c)*3` desc, 동점 최신. hidden 제외 + createdAt≥since.
+- `repository/UserRepository.findByStatus(UserStatus)` — ACTIVE 유저.
+- `service/NotificationService.notifyDigest(List<User>, message, topPostId)` — SYSTEM 알림 배치 `saveAll`.
+- `resources/application.yml` — `app.weekly-digest.cron`/`top-n`.
+- 프론트: **무변경 확인 완료**(NotificationPanel SYSTEM=Bell 렌더, FeedPage `handleNotificationClick`이 `postId`로 이동).
+- 테스트: `WeeklyDigestServiceTest`(단위 4 — 발송/인기글0/수신자0/긴제목truncate), `WeeklyDigestRepositoryTest`(@DataJpaTest 4 — 점수순+DISTINCT 검출/TopN/숨김/기간).
+
+**검증**: `./gradlew test` BUILD SUCCESSFUL(전체). **스키마/Flyway 변경 없음**. 실발송 수동 확인은 미수행(cron 임박 설정 또는 메서드 직접 호출로 가능).
+
+<details><summary>최초 계획(접기)</summary>
+
+§6-3/§6-5 C. 지난 7일 인기글 Top N을 매주 월요일 09:10에 자동 집계해 모든 ACTIVE 유저에게 앱 내 알림으로 발송.
 
 ### 확정 스펙
 - **발송 채널**: 앱 내 알림(기존 `NotificationService` + `NotificationType.SYSTEM` 재사용). MM DM/이메일 아님.
@@ -51,6 +67,8 @@
 - 인기글 0건(지난 주 글 없음)이면 발송 스킵.
 - 재실행 중복(스케줄러 재기동 시) — 단일 인스턴스 전제로 MVP는 가드 생략(필요 시 "이번 주 이미 발송" 체크 후속).
 - 검증: 단위 테스트 + 수동 트리거(테스트용으로 cron 임박 시각 설정하거나 메서드 직접 호출)로 알림 생성 확인.
+
+</details>
 
 ---
 

@@ -43,6 +43,22 @@ public class NotificationService {
     }
     // [/FEATURE:reactions]
 
+    // [FEATURE:weekly-digest] 주간 인기글 다이제스트 — 전체 수신자에게 동일한 SYSTEM 알림을 1건씩 일괄 생성.
+    // 유저 수만큼 INSERT가 발생하므로 saveAll로 배치 저장(개별 save N회 회피). message 길이 제한(varchar 255)은
+    // 호출측(WeeklyDigestService)에서 구성 시 보장하고, topPostId는 단일 Long이라 1위 글로 링크된다.
+    public void notifyDigest(List<User> recipients, String message, Long topPostId) {
+        List<Notification> notifications = recipients.stream()
+                .map(recipient -> Notification.builder()
+                        .recipient(recipient)
+                        .type(NotificationType.SYSTEM)
+                        .message(message)
+                        .postId(topPostId)
+                        .build())
+                .collect(Collectors.toList());
+        notificationRepository.saveAll(notifications);
+    }
+    // [/FEATURE:weekly-digest]
+
     private void save(User recipient, NotificationType type, String message, Long postId) {
         notificationRepository.save(Notification.builder()
                 .recipient(recipient)

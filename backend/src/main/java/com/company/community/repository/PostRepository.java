@@ -9,6 +9,9 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 public interface PostRepository extends JpaRepository<Post, Long> {
 
     // ★ 조회수 동시성 해결 — 벌크 UPDATE로 race condition 방지
@@ -75,4 +78,16 @@ public interface PostRepository extends JpaRepository<Post, Long> {
                                    @Param("cohort") String cohort,   // [FEATURE:cohort-campus-lounge]
                                    @Param("campus") String campus,   // [FEATURE:cohort-campus-lounge]
                                    Pageable pageable);
+
+    // [FEATURE:weekly-digest] 주간 다이제스트 — 최근 N일(:since 이후 작성) 인기 글 랭킹.
+    // 점수 = 조회수*1 + 반응수*2 + 댓글수*3 (조회:반응:댓글 = 1:2:3) 내림차순, 동점이면 최신. Pageable로 Top N.
+    // ⚠️ 다중 LEFT JOIN의 카티전 곱을 막기 위해 COUNT은 반드시 DISTINCT. reactions = post_likes 전체 행(반응 종류 무관).
+    @Query("SELECT p FROM Post p " +
+            "LEFT JOIN PostLike pl ON pl.post = p " +
+            "LEFT JOIN Comment c ON c.post = p " +
+            "WHERE p.hidden = false AND p.createdAt >= :since " +
+            "GROUP BY p " +
+            "ORDER BY (p.viewCount + COUNT(DISTINCT pl) * 2 + COUNT(DISTINCT c) * 3) DESC, p.createdAt DESC")
+    List<Post> findTopByScoreSince(@Param("since") LocalDateTime since, Pageable pageable);
+    // [/FEATURE:weekly-digest]
 }

@@ -247,3 +247,29 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 5. DB: `alter table post_likes drop column reaction_type;` (V5 적용 환경).
 
 **미적용(후속 후보)**: 멀티 선택 반응, 댓글 반응, 반응 종류별 알림(REPLY처럼 type 분리), 반응한 사람 목록(익명 유지 전제).
+
+---
+
+## weekly-digest — 주간 인기글 다이제스트 (2026-06-02)
+
+§6-3/§6-5 C. **지난 7일 인기글 Top N을 매주 월요일 09:10에 자동 집계해 모든 ACTIVE 유저에게 앱 내 알림(SYSTEM)으로 발송.** 익명 유지(글 제목/링크만). **백엔드 전용**(스키마 변경 없음, 프론트 무변경).
+
+**범위/동작**
+- 스케줄: 매주 월 **09:10**(Spring cron `0 10 9 * * MON`). `app.weekly-digest.cron`으로 override. **단일 인스턴스 전제**(RefreshTokenCleanupScheduler와 동일 — 수평 확장 시 ShedLock 필요).
+- 인기 점수: `viewCount*1 + 반응수*2 + 댓글수*3`(조회:반응:댓글 = **1:2:3**) 내림차순, 동점이면 최신. Top N(기본 5, `app.weekly-digest.top-n`). **랭킹 쿼리의 COUNT은 DISTINCT 필수**(다중 LEFT JOIN 카티전 곱 방지). reactions=post_likes 전체 행(타입 무관), 댓글=답글 포함 총계.
+- 발송: 최근 7일(작성일 기준) 인기 글 → ACTIVE 유저 전체에게 SYSTEM 알림 1건씩 `saveAll`(배치). 알림 `message`(varchar 255)는 상위 3개 제목(각 30자 미리보기) + 255자 안전망 truncate, `postId`는 단일 Long이라 **1위 글로 링크**.
+- 알림 종은 TopBar에 이미 있고 SYSTEM 알림도 Bell 아이콘으로 동일 렌더 + `postId` 클릭 이동(FeedPage `handleNotificationClick`) → **프론트 무변경**.
+
+**알려진 동작/한계**: ① 수신 거부(opt-out) 없음 — 앱 내 알림이라 부담 적다는 판단. ② 인기글 0건이면 발송 스킵. ③ 재실행 중복 가드 없음(단일 인스턴스 전제 MVP — 필요 시 "이번 주 이미 발송" 체크 후속). ④ window 7일 고정(상수). ⑤ 익명: 작성자 신원 미노출, 제목/링크만.
+
+**마커 위치 (`[FEATURE:weekly-digest]`)**
+- (신규) 백엔드: `scheduler/WeeklyDigestScheduler.java`, `service/WeeklyDigestService.java`. 테스트: `test/service/WeeklyDigestServiceTest.java`(단위 4종), `test/repository/WeeklyDigestRepositoryTest.java`(@DataJpaTest 4종 — 점수/DISTINCT·TopN·숨김·기간) — 파일 전체.
+- 백엔드(수정): `repository/PostRepository.java`(`findTopByScoreSince` + import), `repository/UserRepository.java`(`findByStatus` + import), `service/NotificationService.java`(`notifyDigest(List<User>,…)` 배치 SYSTEM), `resources/application.yml`(`app.weekly-digest.cron`/`top-n`).
+- 프론트: 없음.
+
+**롤백 절차**
+1. 위 수정 파일들에서 `[FEATURE:weekly-digest]` 마커 블록 제거(PostRepository 쿼리+import, UserRepository `findByStatus`+import, NotificationService `notifyDigest`, application.yml `weekly-digest` 키).
+2. 신규 파일 4종 삭제(`WeeklyDigestScheduler`, `WeeklyDigestService`, `WeeklyDigestServiceTest`, `WeeklyDigestRepositoryTest`).
+3. DB/마이그레이션 변경 없음(notifications 테이블·SYSTEM enum 재사용).
+
+**미적용(후속 후보)**: 수신 거부(opt-out) 플래그, 중복 발송 가드("이번 주 이미 발송" 체크), 채널 확장(MM DM/이메일), window/Top N 사용자 설정, 다이제스트 전용 알림 타입(현재 SYSTEM 재사용).
