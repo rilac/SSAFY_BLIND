@@ -354,7 +354,12 @@ export default function PostDetailPage() {
                       </div>
                     </div>
                     <span className="text-[10px] font-mono text-muted-foreground mt-1 block">
-                      {comment.author?.nickname} · {comment.author?.cohort} {comment.author?.campus} ·{' '}
+                      {/* [FEATURE:op-alias] 닉네임 대신 글 단위 별칭(글쓴이/익명N). 글쓴이(OP)는 강조. */}
+                      <span className={comment.isAuthor ? 'text-primary font-semibold' : undefined}>
+                        {comment.alias}
+                      </span>
+                      {/* [/FEATURE:op-alias] */}
+                      {' · '}{comment.author?.cohort} {comment.author?.campus} ·{' '}
                       {formatTimestamp(comment.createdAt)}
                     </span>
                   </div>

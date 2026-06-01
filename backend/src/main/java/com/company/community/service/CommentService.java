@@ -59,7 +59,12 @@ public class CommentService {
         }
 
         // (#2) 작성자 본인이므로 isMine=true. author는 작성자 본인 전달.
-        return CommentResponse.of(saved, userId, author);
+        // [FEATURE:op-alias] 새 댓글의 글 단위 별칭/글쓴이 여부 계산 — 프론트가 즉시(낙관적 append) 표시할 수 있도록.
+        Long postAuthorId = post.getAuthor().getId();
+        Map<Long, String> aliasByUser =
+                buildAliasMap(postAuthorId, commentRepository.findAllByPostIdOrderByCreatedAtAsc(postId));
+        return CommentResponse.of(saved, userId, author, aliasByUser.get(userId), userId.equals(postAuthorId));
+        // [/FEATURE:op-alias]
     }
 
     /**
@@ -68,9 +73,11 @@ public class CommentService {
      */
     @Transactional(readOnly = true)
     public List<CommentResponse> getComments(Long postId, Long currentUserId) {
-        if (!postRepository.existsById(postId)) {
-            throw new NoSuchElementException("존재하지 않는 게시글입니다.");
-        }
+        // [FEATURE:op-alias] 글쓴이(OP) 식별을 위해 글 작성자 id가 필요 → existsById 대신 findById로 로드.
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+        Long postAuthorId = post.getAuthor().getId();
+        // [/FEATURE:op-alias]
 
         List<Comment> comments = commentRepository.findAllByPostIdOrderByCreatedAtAsc(postId);
 
@@ -82,10 +89,36 @@ public class CommentService {
         Map<Long, User> authorMap = new HashMap<>();
         userRepository.findAllById(authorIds).forEach(u -> authorMap.put(u.getId(), u));
 
+        // [FEATURE:op-alias] 글 단위 일관 별칭 맵(글쓴이/익명N) — 댓글마다 동일 유저는 동일 별칭.
+        Map<Long, String> aliasByUser = buildAliasMap(postAuthorId, comments);
         return comments.stream()
-                .map(c -> CommentResponse.of(c, currentUserId, authorMap.get(c.getAuthor().getId())))
+                .map(c -> {
+                    Long uid = c.getAuthor().getId();
+                    return CommentResponse.of(c, currentUserId, authorMap.get(uid),
+                            aliasByUser.get(uid), uid.equals(postAuthorId));
+                })
                 .collect(Collectors.toList());
+        // [/FEATURE:op-alias]
     }
+
+    // [FEATURE:op-alias] 글 단위 일관 익명 별칭 계산.
+    // 글쓴이(OP) → "글쓴이". 그 외 작성자는 첫 등장(오래된 댓글) 순으로 "익명1","익명2"… 부여하고,
+    // 같은 유저는 글 내내 같은 별칭을 유지한다. orderedComments는 createdAt 오름차순이어야 번호가 결정적이다.
+    private static final String OP_ALIAS = "글쓴이";
+
+    private Map<Long, String> buildAliasMap(Long postAuthorId, List<Comment> orderedComments) {
+        Map<Long, String> aliasByUser = new HashMap<>();
+        aliasByUser.put(postAuthorId, OP_ALIAS); // 글쓴이는 익명 번호 대신 항상 "글쓴이"
+        int counter = 0;
+        for (Comment c : orderedComments) {
+            Long uid = c.getAuthor().getId();
+            if (!aliasByUser.containsKey(uid)) {
+                aliasByUser.put(uid, "익명" + (++counter));
+            }
+        }
+        return aliasByUser;
+    }
+    // [/FEATURE:op-alias]
 
     /**
      * (#2) 댓글 삭제 — 본인 댓글이거나 ADMIN이면 삭제 허용

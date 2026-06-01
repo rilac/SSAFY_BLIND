@@ -62,3 +62,32 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 3. DB: `alter table posts drop column accepted_comment_id;` (이미 V2 적용된 환경) — 또는 V2 미적용이면 불필요.
 
 **미적용(후속 후보)**: 채택 시 답변자에게 알림, QUESTION 외 카테고리 확장.
+
+---
+
+## op-alias — 댓글 글쓴이(OP) 표시 + 글 단위 익명 별칭 (2026-06-02)
+
+§6-5 B 1순위. 닉네임이 유일하지 않아(H-anon) 스레드에서 글쓴이/동일인 식별이 혼동되는 문제를, **글 단위로 일관된 익명 별칭**으로 해결(에타식). **백엔드(별칭 계산) + 프론트(표시 대체).**
+
+**범위/동작**
+- 별칭 계산은 **서버에서 `user_id` 기준**으로 수행(프론트에는 신원/유저 id 미노출 유지). 글쓴이(OP) → `"글쓴이"`, 그 외 작성자는 **첫 등장(오래된 댓글) 순**으로 `"익명1"·"익명2"…`. 같은 유저는 그 글 안에서 항상 같은 별칭.
+- 프론트는 댓글 작성자 줄에서 **닉네임을 별칭으로 대체**(기수·캠퍼스는 맥락용 유지). 글쓴이는 primary 색 + 굵게 강조.
+- 적용 범위는 **댓글 스레드 한정**(사용자 결정). 피드 카드·상세 헤더의 닉네임 표시는 그대로 유지 → `PostResponse`/`PostListResponse`/`PostCard` 무변경.
+- 댓글 작성 응답(낙관적 append)도 새 댓글의 별칭/글쓴이 여부를 포함하도록 `addComment`가 글 전체 댓글을 1회 재조회해 계산.
+
+**알려진 동작**: 별칭은 매 조회 시 createdAt 순서로 재계산되므로, 중간 익명N의 댓글이 모두 삭제되면 이후 번호가 한 칸씩 당겨질 수 있다(에타와 동일, 스레드 내 일관성은 매 렌더 기준 보장). API 페이로드(`CommentResponse.author`)에는 기존처럼 닉네임이 포함되나 UI는 렌더하지 않음 — 페이로드에서도 비노출하려면 후속에서 댓글 전용 AuthorInfo 분기.
+
+**마커 위치 (`[FEATURE:op-alias]`)**
+- 백엔드: `dto/CommentResponse.java`(`alias`+`op` 필드, `of` 시그니처에 `alias,isAuthor` 추가), `service/CommentService.java`(`buildAliasMap` 헬퍼·`OP_ALIAS` 상수, `getComments`의 `existsById`→`findById`+별칭 적용, `addComment`의 별칭 계산).
+- (신규) `test/CommentServiceAliasTest.java` — 파일 전체(4종: getComments 별칭/없는글, addComment 글쓴이/타인).
+- 프론트: `pages/PostDetailPage.jsx`(댓글 작성자 줄의 닉네임 → 별칭 + 글쓴이 강조).
+
+**롤백 절차**
+1. 위 파일들에서 `[FEATURE:op-alias]` 마커 블록 제거.
+   - `CommentResponse.of`를 기존 3-인자 시그니처 `of(comment, currentUserId, author)`로 되돌리고 `alias`/`op` 필드 제거.
+   - `CommentService.getComments`의 `findById`를 다시 `existsById` 가드로 되돌리고, 두 호출부의 `CommentResponse.of(...)`를 3-인자로 환원. `addComment` 반환을 `CommentResponse.of(saved, userId, author)`로 환원. `buildAliasMap`/`OP_ALIAS` 삭제.
+   - `PostDetailPage`의 댓글 작성자 줄을 `{comment.author?.nickname} · {cohort} {campus} · {time}`로 복원.
+2. 신규 파일 `test/CommentServiceAliasTest.java` 삭제.
+3. DB/마이그레이션 변경 없음(스키마 무변경).
+
+**미적용(후속 후보)**: 댓글 페이로드에서 비-OP 닉네임 제거(진짜 페이로드 익명화), 게시글/피드까지 별칭 확장(에타 완전 적용), 별칭 호버 시 기수/캠퍼스 외 부가정보.
