@@ -14,9 +14,13 @@ import { CATEGORY_LABELS } from '../lib/categories';
 
 const PAGE_SIZE = 20;
 
-function viewLabel(scope, category) {
+function viewLabel(scope, category, user) {
   if (scope === 'bookmarked') return '스크랩';
   if (scope === 'mine') return '내가 쓴 글';
+  // [FEATURE:cohort-campus-lounge] 라운지 뷰 라벨(현재 유저의 캠퍼스/기수 표기)
+  if (scope === 'campus') return `우리 캠퍼스${user?.campus ? ` · ${user.campus}` : ''}`;
+  if (scope === 'cohort') return `동기${user?.cohort ? ` · ${user.cohort}` : ''}`;
+  // [/FEATURE:cohort-campus-lounge]
   if (category === 'all') return '전체글';
   return CATEGORY_LABELS[category] || '전체글';
 }
@@ -35,7 +39,7 @@ export default function FeedPage() {
 
   // 필터 상태
   const [category, setCategory] = useState('all'); // 'all' | enum
-  const [scope, setScope] = useState('all'); // all | mine | bookmarked
+  const [scope, setScope] = useState('all'); // all | mine | bookmarked | campus | cohort([FEATURE:cohort-campus-lounge])
   const [sort, setSort] = useState('latest'); // latest | popular
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
@@ -222,7 +226,7 @@ export default function FeedPage() {
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-mono">{viewLabel(scope, category)}</h2>
+              <h2 className="text-lg font-mono">{viewLabel(scope, category, user)}</h2>
               {debouncedSearch && (
                 <span className="text-xs font-mono text-muted-foreground">SEARCH: "{debouncedSearch}"</span>
               )}

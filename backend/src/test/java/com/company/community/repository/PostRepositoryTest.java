@@ -68,14 +68,14 @@ class PostRepositoryTest {
     @Test
     @DisplayName("필터 없으면 전체 게시글이 조회된다")
     void test_전체조회() {
-        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, null, pageable);
         assertThat(page.getTotalElements()).isEqualTo(3);
     }
 
     @Test
     @DisplayName("카테고리 필터가 적용된다 (FREE 2건)")
     void test_카테고리_필터() {
-        Page<Post> page = postRepository.findFilteredLatest(PostCategory.FREE, null, null, null, pageable);
+        Page<Post> page = postRepository.findFilteredLatest(PostCategory.FREE, null, null, null, null, null, pageable);
         assertThat(page.getContent()).extracting(Post::getCategory).containsOnly(PostCategory.FREE);
         assertThat(page.getTotalElements()).isEqualTo(2);
     }
@@ -83,28 +83,28 @@ class PostRepositoryTest {
     @Test
     @DisplayName("키워드 검색이 제목·본문에 적용된다")
     void test_키워드_검색() {
-        Page<Post> page = postRepository.findFilteredLatest(null, "도커", null, null, pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, "도커", null, null, null, null, pageable);
         assertThat(page.getContent()).extracting(Post::getId).containsExactly(p3.getId());
     }
 
     @Test
     @DisplayName("scope=mine 은 작성자 본인 글만 조회한다")
     void test_내가쓴글() {
-        Page<Post> page = postRepository.findFilteredLatest(null, null, u1.getId(), null, pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, null, u1.getId(), null, null, null, pageable);
         assertThat(page.getContent()).extracting(Post::getId).containsExactlyInAnyOrder(p1.getId(), p3.getId());
     }
 
     @Test
     @DisplayName("scope=bookmarked 는 내가 스크랩한 글만 조회한다")
     void test_스크랩한글() {
-        Page<Post> page = postRepository.findFilteredLatest(null, null, null, u1.getId(), pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, null, null, u1.getId(), null, null, pageable);
         assertThat(page.getContent()).extracting(Post::getId).containsExactly(p2.getId());
     }
 
     @Test
     @DisplayName("인기순은 좋아요가 많은 글이 먼저 온다")
     void test_인기순() {
-        Page<Post> page = postRepository.findFilteredPopular(null, null, null, null, pageable);
+        Page<Post> page = postRepository.findFilteredPopular(null, null, null, null, null, null, pageable);
         assertThat(page.getContent().get(0).getId()).isEqualTo(p2.getId());
         assertThat(page.getTotalElements()).isEqualTo(3);
     }
@@ -115,7 +115,7 @@ class PostRepositoryTest {
         p2.hide();
         postRepository.save(p2);
 
-        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, null, pageable);
 
         assertThat(page.getContent()).extracting(Post::getId).doesNotContain(p2.getId());
         assertThat(page.getTotalElements()).isEqualTo(2);

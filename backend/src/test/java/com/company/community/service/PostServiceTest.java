@@ -227,6 +227,65 @@ class PostServiceTest {
         verify(postRepository).delete(post);
     }
 
+    // [FEATURE:cohort-campus-lounge] scope=campus/cohort는 현재 유저의 캠퍼스/기수를 repo 필터로 넘긴다
+    @Test
+    @DisplayName("scope=campus는 유저의 캠퍼스를 필터로, cohort는 null로 넘긴다")
+    void test_scope_campus_유저캠퍼스_필터() {
+        author = User.builder().mmUserId("a").cohort("10기").campus("서울")
+                .status(UserStatus.ACTIVE).role(UserRole.USER).build();
+        setId(author, 1L);
+        given(userRepository.findById(1L)).willReturn(Optional.of(author));
+        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), any()))
+                .willReturn(org.springframework.data.domain.Page.empty());
+
+        postService.getAllPosts(0, 20, 1L, null, null, "latest", "campus");
+
+        var cohortCap = org.mockito.ArgumentCaptor.forClass(String.class);
+        var campusCap = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(postRepository).findFilteredLatest(any(), any(), any(), any(),
+                cohortCap.capture(), campusCap.capture(), any());
+        assertThat(campusCap.getValue()).isEqualTo("서울");
+        assertThat(cohortCap.getValue()).isNull();
+    }
+
+    @Test
+    @DisplayName("scope=cohort는 유저의 기수를 필터로, campus는 null로 넘긴다")
+    void test_scope_cohort_유저기수_필터() {
+        author = User.builder().mmUserId("a").cohort("10기").campus("서울")
+                .status(UserStatus.ACTIVE).role(UserRole.USER).build();
+        setId(author, 1L);
+        given(userRepository.findById(1L)).willReturn(Optional.of(author));
+        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), any()))
+                .willReturn(org.springframework.data.domain.Page.empty());
+
+        postService.getAllPosts(0, 20, 1L, null, null, "latest", "cohort");
+
+        var cohortCap = org.mockito.ArgumentCaptor.forClass(String.class);
+        var campusCap = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(postRepository).findFilteredLatest(any(), any(), any(), any(),
+                cohortCap.capture(), campusCap.capture(), any());
+        assertThat(cohortCap.getValue()).isEqualTo("10기");
+        assertThat(campusCap.getValue()).isNull();
+    }
+
+    @Test
+    @DisplayName("scope=all은 유저를 로드하지 않고 cohort/campus 필터가 모두 null이다")
+    void test_scope_all_라운지필터_없음() {
+        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), any()))
+                .willReturn(org.springframework.data.domain.Page.empty());
+
+        postService.getAllPosts(0, 20, 1L, null, null, "latest", "all");
+
+        verify(userRepository, never()).findById(anyLong());
+        var cohortCap = org.mockito.ArgumentCaptor.forClass(String.class);
+        var campusCap = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(postRepository).findFilteredLatest(any(), any(), any(), any(),
+                cohortCap.capture(), campusCap.capture(), any());
+        assertThat(cohortCap.getValue()).isNull();
+        assertThat(campusCap.getValue()).isNull();
+    }
+    // [/FEATURE:cohort-campus-lounge]
+
     // 리플렉션으로 DTO 필드 설정
     private void setField(Object obj, String fieldName, Object value) {
         try {

@@ -10,6 +10,8 @@ import {
   LogOut,
   Inbox,
   Shield,
+  MapPin, // [FEATURE:cohort-campus-lounge]
+  Users, // [FEATURE:cohort-campus-lounge]
 } from 'lucide-react';
 import { CATEGORY_LABELS } from '../lib/categories';
 import Logo from './Logo';
@@ -78,6 +80,38 @@ export default function Sidebar({
             );
           })}
         </div>
+
+        {/* [FEATURE:cohort-campus-lounge] 기수/캠퍼스 라운지 — 같은 캠퍼스·동기(기수) 글만 보기. 익명 유지·범위만 한정. */}
+        <div className="mt-8 pt-6 border-t border-border">
+          <h3 className="text-xs font-mono text-muted-foreground mb-3 px-3">LOUNGE</h3>
+          <div className="space-y-1">
+            <button
+              onClick={() => onSelectScope('campus')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-mono border transition-colors ${
+                scope === 'campus'
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-transparent hover:border-border'
+              }`}
+            >
+              <MapPin size={16} />
+              <span className="flex-1 text-left">우리 캠퍼스</span>
+              {user?.campus && <span className="text-[10px] opacity-70">{user.campus}</span>}
+            </button>
+            <button
+              onClick={() => onSelectScope('cohort')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 text-sm font-mono border transition-colors ${
+                scope === 'cohort'
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'border-transparent hover:border-border'
+              }`}
+            >
+              <Users size={16} />
+              <span className="flex-1 text-left">동기</span>
+              {user?.cohort && <span className="text-[10px] opacity-70">{user.cohort}</span>}
+            </button>
+          </div>
+        </div>
+        {/* [/FEATURE:cohort-campus-lounge] */}
 
         <div className="mt-8 pt-6 border-t border-border">
           <h3 className="text-xs font-mono text-muted-foreground mb-3 px-3">QUICK_ACCESS</h3>

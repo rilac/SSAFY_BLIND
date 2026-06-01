@@ -130,7 +130,7 @@ public class PostService {
     }
 
     /**
-     * 게시글 목록 — 카테고리/검색/정렬/scope(all|mine|bookmarked) 통합 + N+1 배치 해결
+     * 게시글 목록 — 카테고리/검색/정렬/scope(all|mine|bookmarked|campus|cohort) 통합 + N+1 배치 해결
      */
     @Transactional(readOnly = true)
     public PageResponse<PostListResponse> getAllPosts(int page, int size, Long currentUserId,
@@ -140,10 +140,22 @@ public class PostService {
         Long bookmarkerId = "bookmarked".equals(scope) ? currentUserId : null;
         String kw = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
 
+        // [FEATURE:cohort-campus-lounge] 라운지 scope는 현재 유저의 기수/캠퍼스로 한정(서버가 해석 — 프론트는 값 미전달).
+        // 온보딩 필수값이라 ACTIVE 유저는 항상 값 보유. 라운지 scope일 때만 유저 로드.
+        String cohortFilter = null;
+        String campusFilter = null;
+        if ("cohort".equals(scope) || "campus".equals(scope)) {
+            User me = userRepository.findById(currentUserId)
+                    .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
+            cohortFilter = "cohort".equals(scope) ? me.getCohort() : null;
+            campusFilter = "campus".equals(scope) ? me.getCampus() : null;
+        }
+        // [/FEATURE:cohort-campus-lounge]
+
         Pageable pageable = PageRequest.of(page, size);
         Page<Post> resultPage = "popular".equals(sort)
-                ? postRepository.findFilteredPopular(category, kw, authorId, bookmarkerId, pageable)
-                : postRepository.findFilteredLatest(category, kw, authorId, bookmarkerId, pageable);
+                ? postRepository.findFilteredPopular(category, kw, authorId, bookmarkerId, cohortFilter, campusFilter, pageable)
+                : postRepository.findFilteredLatest(category, kw, authorId, bookmarkerId, cohortFilter, campusFilter, pageable);
 
         List<Post> posts = resultPage.getContent();
         List<Long> postIds = posts.stream().map(Post::getId).collect(Collectors.toList());

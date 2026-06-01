@@ -4,12 +4,28 @@
 분석/계획 문서는 [MoreDevelopments.md](./MoreDevelopments.md)(1차) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md)(2차)이며, 본 문서는 **무엇을 실제로 구현했는지**를 한곳에 모은 진행 현황입니다.
 
 - 최종 업데이트: 2026-06-02
-- Git: **Phase A~D 커밋·푸시 완료**(`origin/main` — `83df359` 저장소 위생 + `9a3bd3e` Phase A~D). **Access/Refresh 토큰 분리 + Flyway(M-NEW-7)는 구현 완료·미커밋**(로컬 작업트리 — 커밋 대기).
-- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway 완료**) → **남은 것: 테스트 폭 보강 + Phase E/§6 기능**
+- Git: **Phase 0~D + Access/Refresh + Flyway(M-NEW-7) 커밋·푸시 완료**(`origin/main` — 최신 `178e6c3`). **Phase E(마크다운 렌더링 + Q&A 채택 + OP/익명 별칭 + 기수/캠퍼스 라운지)는 구현 완료·미커밋**(로컬 작업트리 — 커밋 대기).
+- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway**) → **Phase E 진행 중**(✅ 마크다운/코드블록 · ✅ Q&A 채택/해결됨 · ✅ OP 표시+글 단위 익명 별칭 · ✅ 기수/캠퍼스 라운지) → **남은 것: Phase E 나머지(모더레이션 강화·대댓글/리액션 등) + 테스트 폭**
 - ✅ **Access/Refresh 토큰 분리 구현 완료(2026-06-02)**: 짧은 Access(30m, stateless) + DB 저장 Refresh(14d, `refresh_tokens`) + `/api/auth/refresh` 회전 재발급 + 만료 정리 스케줄러. 검증: backend `./gradlew.bat test` BUILD SUCCESSFUL, frontend `npm run build` 성공. *(아래 "✅ Refresh Token 도입" 섹션)*
 - ✅ **M-NEW-7 Flyway 도입 완료(2026-06-02)**: Hibernate가 생성한 `V1__baseline.sql`(=validate와 정확히 일치) + `baseline-on-migrate`로 기존/신규 DB 모두 안전 처리. dev/prod 모두 Flyway ON·`ddl-auto: validate`, 테스트(H2)는 Flyway OFF. **배포 전 수동 DDL 폐기.** *(아래 "✅ M-NEW-7 Flyway" 섹션)*
-- 운영 완성도 추이: 1차 65~70% → Phase 0 후 70~75% → Phase A·B 후 배포 가능 → Phase C 후 UX/정책 마감 → **Phase D(운영품질) 반영 중(약 88~90%)**
+- 운영 완성도 추이: 1차 65~70% → Phase 0 후 70~75% → Phase A·B 후 배포 가능 → Phase C 후 UX/정책 마감 → Phase D(운영품질)+Access/Refresh+Flyway 완료(약 92%) → **Phase E(기능 확장) 진행 중**
 - 작업 범위 원칙: **리뷰 반영 수정은 영구**(롤백 마커 없음). **기능 확장(§6)은 롤백 용이하도록 마커**(아래 [롤백 마커 규약](#롤백-마커-규약)) — Phase 0/A/B는 전부 수정이라 마커 미사용.
+
+---
+
+## ▶ 다음 작업 (바로 이어서 시작)
+
+> 재개용 체크리스트. 상세는 각 섹션 참조. 현재 모든 작업트리 변경은 **검증 완료(테스트/빌드 통과)** 상태.
+
+1. **미커밋 정리 (먼저)** — Phase E 네 기능이 로컬 미커밋. 논리 단위 4커밋 권장 후 push:
+   - `feat: 게시글 마크다운/코드블록 렌더링 (Phase E)` — `FEATURES.md` markdown-rendering 범위
+   - `feat: Q&A 답변 채택/해결됨 (Phase E)` — `FEATURES.md` qna-accept 범위 (+ Flyway `V2`)
+   - `feat: 댓글 글쓴이(OP) 표시 + 글 단위 익명 별칭 (Phase E)` — `FEATURES.md` op-alias 범위 (스키마 무변경)
+   - `feat: 기수/캠퍼스 스코프 필터·라운지 (Phase E)` — `FEATURES.md` cohort-campus-lounge 범위 (스키마 무변경)
+   - 확인: `git status`. (Access/Refresh·Flyway는 이미 `178e6c3`로 푸시됨)
+2. **다음 기능 (문서 권장 순)** — Phase E A/B 우선순위 소진. 남은 §6 백로그 중 택1: **모더레이션 강화**(소프트삭제+휴지통·감사 로그·강제 숨김, §6 운영품질) 또는 **대댓글/리액션 확장**(§6-1/6-3) 또는 **익명 투표/설문**(§6-5 B ☆). 착수 시 롤백 마커 + `FEATURES.md` 인덱싱.
+3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1+V2 자동 적용**(`flyway_schema_history` 생성, `accepted_comment_id` 컬럼). op-alias·라운지는 스키마 무변경. 채택/마크다운/별칭/라운지 필터 E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료).
+4. **테스트 폭(여력 시)** — 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (CommentService 단위[채택·별칭]·PostService 단위[scope]·삭제 통합·라운지 @DataJpaTest·헬스/인가 스모크·RefreshTokenService는 완료)
 
 ---
 
@@ -114,9 +130,10 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 | **로그아웃/탈퇴/휴면 폐기** | 로그아웃=제시된 RT 삭제, 탈퇴/휴면=유저 RT 전체 삭제 → AT 자연만료(≤30m)+RT 즉시폐기 = 완전 무효화 | `controller/AuthController`, `service/AccountService`, `controller/AccountController` |
 | **만료 정리 스케줄러** | `@EnableScheduling` + `@Scheduled`(기본 매일 04:00, `app.refresh-cleanup.cron`) 벌크 DELETE. 단일 인스턴스 전제 | (신규) `scheduler/RefreshTokenCleanupScheduler`, `CommunityApplication` |
 | **프론트 인터셉터** | AT 401 → `/api/auth/refresh` 1회 호출 후 원요청 재시도, 동시 401은 단일 refresh로 큐잉(single-flight), 실패 시 로그인 | `frontend/src/api/client.js` |
-| **prod 수동 DDL** | `refresh_tokens` 생성 스크립트(prod `validate` 대비) | (신규) `backend/db/migration/2026-06-02_refresh_tokens.sql`, `backend/db/README.md` |
+| **prod 스키마** | `refresh_tokens`는 최초 수동 DDL 스크립트로 도입했으나, 직후 **M-NEW-7 Flyway 도입 시 `V1__baseline.sql`에 통합**(수동 스크립트 삭제) | (현재) `db/migration/V1__baseline.sql` |
 
 **기록 문서**: `MoreDevelopments_V2.md`의 「Access/Refresh 토큰 분리」 섹션.
+> ⓘ 위 표의 "prod 수동 DDL"은 도입 당시 기준. **현재는 Flyway가 스키마를 관리**하므로 별도 수동 DDL 불필요(아래 "M-NEW-7 Flyway" 참조).
 
 ---
 
@@ -139,6 +156,66 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 
 ---
 
+## ✅ Phase E — 기능 확장 (롤백 마커 적용)
+
+§6 기능 백로그 착수. **여기부터는 롤백 마커**(`[FEATURE:이름]`)**+ 루트 `FEATURES.md` 인덱싱** 적용.
+
+### markdown-rendering — 게시글 본문 마크다운 + 코드블록 (2026-06-02, 미커밋)
+§6-5 A "개발 교육 커뮤니티 특화" 1순위. 게시글 본문 평문 → 마크다운 렌더링 + 코드블록 syntax highlight. **프론트 전용**(본문은 평문 그대로 저장·반환, 렌더링만 마크다운화 — 백엔드 무변경). 검증: `frontend`에서 `npm run build` 성공.
+
+| 항목 | 핵심 | 파일 |
+|---|---|---|
+| 렌더러 | `react-markdown` + `remark-gfm`(표/취소선/체크) + `remark-breaks`(단일 줄바꿈 보존) + `rehype-highlight`(코드 하이라이트) | (신규) `components/Markdown.jsx`, `package.json` |
+| 본문 적용 | `PostDetailPage` 평문 `<p>` → `<Markdown>` (`React.lazy`로 코드 분할 → 상세 페이지에서만 로드, 메인 번들 268KB 유지) | `pages/PostDetailPage.jsx` |
+| 보안/정책 | 원시 HTML 미렌더(rehype-raw 미사용)로 XSS 차단 · 이미지 임베드 비활성(익명 IP 유출/어뷰즈 방지 → 링크 대체) · 외부 링크 `noopener/nofollow` | `components/Markdown.jsx` |
+| 스타일 | 코드블록은 앱 테마 무관 어두운 "터미널" 룩, 인라인 코드는 테마 추종. `.markdown-body`/`.hljs-*` CSS | `index.css` |
+| 작성 힌트 | 작성 폼 내용 라벨에 "마크다운 지원" 안내 | `components/PostForm.jsx` |
+
+**롤백**: `FEATURES.md`의 `markdown-rendering` 절차(마커 제거 + 컴포넌트 삭제 + deps uninstall).
+**후속 후보**: 댓글 마크다운(현재 단일 라인 input).
+
+### qna-accept — Q&A 답변 채택/해결됨 (2026-06-02, 미커밋)
+§6-5 A 2순위. QUESTION 글 작성자가 답변(댓글)을 채택 → "해결됨" 배지(StackOverflow식). **백엔드+프론트**. **Flyway V2 마이그레이션 첫 실전 적용**(새 워크플로 검증). 검증: backend `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `CommentServiceTest` 6종), frontend `npm run build` 성공.
+
+| 항목 | 핵심 | 파일 |
+|---|---|---|
+| 데이터 | `Post.acceptedCommentId`(Long, FK 없음, null=미해결) + 도메인 메서드. **Flyway `V2__add_accepted_comment.sql`** | `domain/Post`, (신규) `db/migration/V2__...sql` |
+| API | `POST /…/comments/{commentId}/accept` 토글. 서버 검증: QUESTION(400)+작성자(403)+댓글 소속(404). 채택 댓글 삭제 시 정리 | `service/CommentService`, `controller/CommentController`, (신규) `dto/AcceptAnswerResponse` |
+| 응답 | `PostResponse.acceptedCommentId`, `PostListResponse.solved`(factory에서 post로부터 파생 — 호출부 무변경) | `dto/{PostResponse,PostListResponse}` |
+| UI | 상세: "해결됨" 배지 + 댓글 채택 토글(작성자·QUESTION 한정)·"채택된 답변" 강조. 피드 카드 "해결됨" 배지 | `pages/PostDetailPage.jsx`, `components/PostCard.jsx` |
+| 테스트 | 채택/토글해제/비작성자/비질문/타글댓글/삭제정리 6종 (CommentService 단위 테스트 잔여 항목도 겸함) | (신규) `test/CommentServiceTest` |
+
+**롤백**: `FEATURES.md`의 `qna-accept` 절차.
+**후속 후보**: 채택 시 답변자 알림.
+
+### op-alias — 댓글 글쓴이(OP) 표시 + 글 단위 익명 별칭 (2026-06-02, 미커밋)
+§6-5 B 1순위. 닉네임 비유일성(H-anon)으로 스레드에서 글쓴이/동일인 식별이 혼동되는 문제를 **글 단위 일관 익명 별칭**(에타식)으로 해결. **별칭은 서버에서 `user_id` 기준 계산**(프론트에 신원 미노출). 글쓴이 → "글쓴이", 그 외는 첫 등장 순 "익명1·2…"(같은 유저=같은 별칭). 사용자 결정으로 **댓글 스레드에서 닉네임을 별칭으로 대체**(기수·캠퍼스 유지), 피드·상세 헤더 닉네임은 유지. 검증: backend `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `CommentServiceAliasTest` 4종), frontend `npm run build` 성공(메인 번들 269KB 유지).
+
+| 항목 | 핵심 | 파일 |
+|---|---|---|
+| 별칭 계산 | `buildAliasMap(postAuthorId, ordered)` — OP=글쓴이, 나머지 첫 등장 순 익명N. `getComments`는 OP id 필요로 `existsById`→`findById` 전환, `addComment`는 글 전체 1회 재조회로 새 댓글 별칭 계산 | `service/CommentService` |
+| 응답 | `CommentResponse.alias`(글쓴이/익명N) + `op`(글쓴이 여부, JSON `isAuthor`). boolean `isAuthor` 필드는 `author` 게터와 충돌해 Lombok 미생성 → 필드명 `op`+`@JsonProperty("isAuthor")` | `dto/CommentResponse` |
+| UI | 댓글 작성자 줄 닉네임 → `alias`로 대체, 글쓴이는 primary·굵게 강조. 기수·캠퍼스·시간 유지 | `pages/PostDetailPage.jsx` |
+| 테스트 | getComments 별칭 부여/없는글, addComment 글쓴이/타인 첫댓글 4종 | (신규) `test/CommentServiceAliasTest` |
+
+**롤백**: `FEATURES.md`의 `op-alias` 절차(스키마 무변경).
+**후속 후보**: 댓글 페이로드의 비-OP 닉네임 제거(진짜 페이로드 익명화), 별칭의 피드/게시글 확장.
+
+### cohort-campus-lounge — 기수/캠퍼스 스코프 필터·라운지 (2026-06-02, 미커밋)
+§6-5 B 2순위. 프로필에만 노출하던 `cohort`/`campus`를 **피드 스코프 필터**로 확장("우리 캠퍼스"·"동기"). **익명 유지·범위만 한정**(서버가 현재 유저 기준으로 해석 — 프론트는 `scope=campus|cohort`만 전달). 검증: backend `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `PostLoungeRepositoryTest` 4종 + `PostServiceTest` scope 3종), frontend `npm run build` 성공(메인 271KB).
+
+| 항목 | 핵심 | 파일 |
+|---|---|---|
+| 쿼리 | `findFilteredLatest`/`findFilteredPopular`에 null-guard `cohort`/`campus` 필터 추가(카테고리·검색·정렬과 직교) | `repository/PostRepository` |
+| scope 해석 | `getAllPosts`가 라운지 scope일 때만 유저 로드 → `me.getCampus()/getCohort()`를 필터로. 컨트롤러·서비스 시그니처 불변. `@NotBlank`라 ACTIVE 유저는 항상 값 보유 | `service/PostService` |
+| UI | 사이드바 `LOUNGE` 섹션(우리 캠퍼스/동기 + 값 표기), 피드 뷰 라벨(`우리 캠퍼스 · 서울`/`동기 · 10기`) | `components/Sidebar.jsx`, `pages/FeedPage.jsx` |
+| 테스트 | 캠퍼스/기수/전체/인기순 필터 4종(@DataJpaTest) + scope→repo 와이어링 3종(단위) | (신규) `test/repository/PostLoungeRepositoryTest`, `test/service/PostServiceTest`(scope 블록) |
+
+**롤백**: `FEATURES.md`의 `cohort-campus-lounge` 절차(스키마 무변경 — 기존 `users.cohort/campus` 재사용).
+**후속 후보**: 타 캠퍼스/기수 브라우징, 캠퍼스+기수 동시 필터, 라운지 전용 게시판.
+
+---
+
 ## ⏳ 이연/후속 항목 (의도적 보류)
 
 | 항목 | 사유 | 출처 |
@@ -151,17 +228,22 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 
 ## 🔜 남은 작업
 
-> **Phase D 완료**(M-NEW-5·삭제 통합 테스트·관측성 + **M-NEW-7 Flyway**). **Access/Refresh 토큰 분리도 구현 완료**(미커밋, 위 섹션들). 남은 것은 아래.
+> 즉시 다음 행동은 상단 [▶ 다음 작업 (바로 이어서 시작)](#-다음-작업-바로-이어서-시작) 참조. 아래는 전체 백로그.
+> **Phase 0~D + Access/Refresh + Flyway 완료**(앞 4개는 푸시됨, Flyway까지 `178e6c3`). **Phase E 마크다운·Q&A 채택 완료(미커밋)**.
 
-### Phase D 잔여 — 테스트 폭
-- 테스트 폭 추가: 컨트롤러 슬라이스(@WebMvcTest), `CommentService` 단위, 인가 케이스 확장. (삭제 통합·헬스/인가 스모크·`RefreshTokenServiceTest`는 완료)
+### 테스트 폭 (상시)
+- 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (단위[CommentService·RefreshTokenService 등]·삭제 통합·헬스/인가 스모크는 완료)
 
 ### Phase E / §6 — 기능 확장 (롤백 마커 적용 대상)
-- 모더레이션 강화(소프트삭제+휴지통, 감사 로그, 강제 숨김), 마크다운+코드블록, Q&A 채택, 대댓글/리액션, 기수·캠퍼스 라운지, 알림 확장/실시간, MM DM 연동 등. 상세는 V2 §6.
+- ✅ **마크다운+코드블록**(완료 — `FEATURES.md` markdown-rendering).
+- ✅ **Q&A 채택/해결됨**(완료 — `FEATURES.md` qna-accept).
+- ✅ **글쓴이(OP) 표시·글 단위 익명 별칭**(완료 — `FEATURES.md` op-alias).
+- ✅ **기수·캠퍼스 스코프 필터·라운지**(완료 — `FEATURES.md` cohort-campus-lounge).
+- 남음(§6 백로그): 모더레이션 강화(소프트삭제+휴지통·감사 로그·강제 숨김), 대댓글/리액션, 익명 투표/설문, 알림 확장/실시간, MM DM 연동, 스터디/팀원 모집 게시판 등. 상세는 V2 §6.
 
 ---
 
-## 🔧 신규 환경변수 / 설정 (Phase A·B 도입)
+## 🔧 신규 환경변수 / 설정 (Phase A·B + Access/Refresh)
 
 | 키(환경변수) | 프로퍼티 | 기본값 | 비고 |
 |---|---|---|---|
@@ -198,7 +280,8 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 ## ✅ 검증 방법
 
 - 백엔드: `cd backend && ./gradlew.bat test` (현재 BUILD SUCCESSFUL). 실행은 dev 프로파일 + MySQL + 환경변수(`DB_HOST/DB_NAME/DB_USERNAME/DB_PASSWORD/JWT_SECRET`) 후 `./gradlew.bat bootRun`.
-- 프론트: `cd frontend && npm install && npm run dev` (Vite proxy `/api`→`localhost:8080`), 빌드 확인 `npm run build`.
+  - **dev `bootRun` 시 Flyway가 `V1`(baseline-on-migrate로 기존 DB는 기록만)·`V2`를 자동 적용** → `flyway_schema_history` 확인. 엔티티 변경 시 `V*__...sql` 누락하면 `validate` 단계에서 기동 실패(의도된 조기 검출).
+- 프론트: `cd frontend && npm install && npm run dev` (Vite proxy `/api`→`localhost:8080`), 빌드 확인 `npm run build`(마크다운 라이브러리는 `React.lazy`로 분리 — 메인 번들 ~269KB).
 
 ---
 

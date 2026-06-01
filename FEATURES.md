@@ -91,3 +91,31 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 3. DB/마이그레이션 변경 없음(스키마 무변경).
 
 **미적용(후속 후보)**: 댓글 페이로드에서 비-OP 닉네임 제거(진짜 페이로드 익명화), 게시글/피드까지 별칭 확장(에타 완전 적용), 별칭 호버 시 기수/캠퍼스 외 부가정보.
+
+---
+
+## cohort-campus-lounge — 기수/캠퍼스 스코프 필터·라운지 (2026-06-02)
+
+§6-5 B 2순위. 이미 수집하나 프로필에만 노출하던 `cohort`/`campus`를 **피드 스코프 필터**로 노출 — "우리 캠퍼스만"·"동기(같은 기수)만". 익명 유지·범위만 한정. **백엔드(쿼리 필터) + 프론트(라운지 UI).**
+
+**범위/동작**
+- 기존 `scope`(all|mine|bookmarked) 축을 **`campus`/`cohort`로 확장**(상호배타 뷰). 값은 **서버가 현재 유저 기준으로 해석**(프론트는 값 미전달 — `scope=campus`/`scope=cohort`만 보냄, 익명/신원 노출 없음).
+- `PostService.getAllPosts`가 라운지 scope일 때만 `userRepository.findById(currentUserId)`로 유저를 로드해 `me.getCampus()`/`me.getCohort()`를 필터로 사용(컨트롤러·서비스 시그니처 불변). `cohort`/`campus`는 온보딩 `@NotBlank`라 ACTIVE 유저는 항상 보유.
+- 리포지토리 `findFilteredLatest`/`findFilteredPopular`에 null-guard 필터 `AND (:cohort IS NULL OR p.author.cohort = :cohort)`·`AND (:campus IS NULL OR p.author.campus = :campus)` 추가. 카테고리/검색/정렬과 **직교 결합**(예: 동기 + 질문 + 인기순).
+- UI: 사이드바 `LOUNGE` 섹션에 "우리 캠퍼스"·"동기" 버튼(현재 유저 캠퍼스/기수 값 표기). 피드 헤더 뷰 라벨에 `우리 캠퍼스 · 서울`/`동기 · 10기`. 카테고리 버튼은 기존대로 scope를 `all`로 리셋(mine/bookmarked와 동일 동작).
+
+**마커 위치 (`[FEATURE:cohort-campus-lounge]`)**
+- 백엔드: `repository/PostRepository.java`(두 쿼리의 cohort/campus AND-절 + `@Param` 2개 × 2메서드), `service/PostService.java`(getAllPosts 내 라운지 scope 해석 블록 + repo 호출 인자).
+- (신규) `test/repository/PostLoungeRepositoryTest.java` — 파일 전체(@DataJpaTest 4종). `test/service/PostServiceTest.java`에 scope 와이어링 3종(마커 블록).
+- 프론트: `components/Sidebar.jsx`(LOUNGE 섹션 + `MapPin`/`Users` import), `pages/FeedPage.jsx`(viewLabel 라운지 케이스 + scope 주석 + `viewLabel(...user)` 호출).
+
+**롤백 절차**
+1. 마커 블록 제거.
+   - `PostRepository`: 두 메서드(latest/popular)의 cohort/campus AND-절(value+countQuery)과 `@Param("cohort")`·`@Param("campus")` 파라미터 2개씩 제거 → 시그니처를 4-필터(category,keyword,authorId,bookmarkerId,pageable)로 환원.
+   - `PostService.getAllPosts`: 라운지 해석 블록 삭제, repo 호출을 `(category, kw, authorId, bookmarkerId, pageable)`로 환원.
+   - 호출부 인자 환원: `PostRepositoryTest` 7곳에서 `, null, null` 제거.
+   - `Sidebar.jsx` LOUNGE 섹션·import, `FeedPage.jsx` viewLabel 라운지 케이스·`user` 인자 제거.
+2. 신규 파일 `test/repository/PostLoungeRepositoryTest.java` 삭제, `PostServiceTest`의 scope 마커 블록 3종 삭제.
+3. DB/마이그레이션 변경 없음(스키마 무변경 — 기존 `users.cohort`/`campus` 컬럼 재사용).
+
+**미적용(후속 후보)**: 다른 캠퍼스/기수 라운지 브라우징(현재는 본인 소속만), 캠퍼스+기수 동시 필터, 라운지 전용 게시판/공지.
