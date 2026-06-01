@@ -33,8 +33,10 @@ public class OnboardingController {
 
         String newToken = onboardingService.completeOnboarding(user.getId(), request);
 
+        // 🗓️ 2026-06-02: 상태가 PENDING→ACTIVE로 바뀌므로 Access Token만 재발급(쿠키 갱신).
+        // Refresh Token은 로그인 시 발급분이 그대로 유효하다(상태 비의존).
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, cookieUtils.createJwtCookie(newToken).toString())
+                .header(HttpHeaders.SET_COOKIE, cookieUtils.createAccessCookie(newToken).toString())
                 .body(Map.of("message", "온보딩이 완료되었습니다."));
     }
 }

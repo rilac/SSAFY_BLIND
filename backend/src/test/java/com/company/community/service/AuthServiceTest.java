@@ -1,11 +1,14 @@
 package com.company.community.service;
 
 import com.company.community.client.MattermostClient;
+import com.company.community.domain.RefreshToken;
 import com.company.community.domain.User;
 import com.company.community.domain.UserRole;
 import com.company.community.domain.UserStatus;
 import com.company.community.dto.LoginResponse;
 import com.company.community.dto.MattermostUser;
+import com.company.community.dto.TokenPair;
+import com.company.community.exception.InvalidCredentialsException;
 import com.company.community.repository.UserRepository;
 import com.company.community.security.JwtProvider;
 import org.junit.jupiter.api.DisplayName;
@@ -17,9 +20,11 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
@@ -36,6 +41,9 @@ class AuthServiceTest {
 
     @Mock
     private JwtProvider jwtProvider;
+
+    @Mock
+    private RefreshTokenService refreshTokenService;
 
     @InjectMocks
     private AuthService authService;
@@ -62,6 +70,7 @@ class AuthServiceTest {
         given(userRepository.save(any(User.class))).willReturn(savedUser);
         given(userRepository.findByMmUserId("mm-user-123")).willReturn(Optional.of(savedUser));
         given(jwtProvider.generateToken(any(), any(), any())).willReturn("mock-jwt-token");
+        given(refreshTokenService.issue(any())).willReturn("mock-refresh-token");
 
         // Act
         LoginResponse result = authService.login("testuser", "password");
@@ -91,6 +100,7 @@ class AuthServiceTest {
                 .build();
         given(userRepository.findByMmUserId("mm-user-456")).willReturn(Optional.of(existingUser));
         given(jwtProvider.generateToken(any(), any(), any())).willReturn("mock-jwt-token");
+        given(refreshTokenService.issue(any())).willReturn("mock-refresh-token");
 
         // Act
         LoginResponse result = authService.login("existuser", "password");
@@ -119,6 +129,7 @@ class AuthServiceTest {
                 .build();
         given(userRepository.findByMmUserId("mm-admin-1")).willReturn(Optional.of(existing));
         given(jwtProvider.generateToken(any(), any(), any())).willReturn("mock-jwt-token");
+        given(refreshTokenService.issue(any())).willReturn("mock-refresh-token");
 
         // Act
         authService.login("adminuser", "password");
@@ -145,9 +156,66 @@ class AuthServiceTest {
                 .build();
         given(userRepository.findByMmUserId("mm-normal-1")).willReturn(Optional.of(existing));
         given(jwtProvider.generateToken(any(), any(), any())).willReturn("mock-jwt-token");
+        given(refreshTokenService.issue(any())).willReturn("mock-refresh-token");
 
         authService.login("normaluser", "password");
 
         assertThat(existing.getRole()).isEqualTo(UserRole.USER);
+    }
+
+    // 🗓️ 2026-06-02: Access/Refresh 토큰 분리 — refresh 재발급
+
+    @Test
+    @DisplayName("refresh: 유효한 RT면 새 AT를 발급하고 RT를 회전한다")
+    void test_refresh_성공() {
+        User user = User.builder()
+                .mmUserId("mm-1")
+                .status(UserStatus.ACTIVE)
+                .role(UserRole.USER)
+                .build();
+        RefreshToken token = RefreshToken.builder()
+                .user(user)
+                .tokenHash("h")
+                .expiresAt(LocalDateTime.now().plusDays(1))
+                .build();
+        given(refreshTokenService.findValid("raw-rt")).willReturn(token);
+        given(refreshTokenService.rotate(token)).willReturn("new-rt");
+        given(jwtProvider.generateToken(any(), any(), any())).willReturn("new-at");
+
+        TokenPair pair = authService.refresh("raw-rt");
+
+        assertThat(pair.accessToken()).isEqualTo("new-at");
+        assertThat(pair.refreshToken()).isEqualTo("new-rt");
+    }
+
+    @Test
+    @DisplayName("refresh: 휴면/탈퇴 계정은 재발급을 거부하고 회전하지 않는다")
+    void test_refresh_비활성계정_거부() {
+        User dormant = User.builder()
+                .mmUserId("mm-2")
+                .status(UserStatus.DORMANT)
+                .role(UserRole.USER)
+                .build();
+        RefreshToken token = RefreshToken.builder()
+                .user(dormant)
+                .tokenHash("h")
+                .expiresAt(LocalDateTime.now().plusDays(1))
+                .build();
+        given(refreshTokenService.findValid("raw-rt")).willReturn(token);
+
+        assertThatThrownBy(() -> authService.refresh("raw-rt"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        verify(refreshTokenService, never()).rotate(any());
+    }
+
+    @Test
+    @DisplayName("refresh: 무효/만료 RT면 예외를 그대로 전파한다")
+    void test_refresh_무효토큰_전파() {
+        given(refreshTokenService.findValid("bad-rt"))
+                .willThrow(new InvalidCredentialsException("유효하지 않은 리프레시 토큰입니다."));
+
+        assertThatThrownBy(() -> authService.refresh("bad-rt"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        verify(refreshTokenService, never()).rotate(any());
     }
 }

@@ -31,6 +31,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         return path.startsWith("/api/auth/login")
             || path.startsWith("/api/auth/logout")
+            || path.startsWith("/api/auth/refresh") // 🗓️ 재발급은 AT 없이도 동작해야 함(RT 쿠키로 검증)
             || path.startsWith("/actuator/health"); // 헬스체크는 토큰 없이 통과(SecurityConfig permitAll)
     }
 
@@ -98,7 +99,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         if (cookies == null) return null;
 
         for (Cookie cookie : cookies) {
-            if (CookieUtils.COOKIE_NAME.equals(cookie.getName())) {
+            if (CookieUtils.ACCESS_COOKIE_NAME.equals(cookie.getName())) {
                 return cookie.getValue();
             }
         }

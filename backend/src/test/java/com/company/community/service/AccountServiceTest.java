@@ -15,11 +15,13 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class AccountServiceTest {
 
     @Mock private UserRepository userRepository;
+    @Mock private RefreshTokenService refreshTokenService; // 🗓️ 2026-06-02: 상태 변경 시 RT 폐기 검증
 
     @InjectMocks private AccountService accountService;
 
@@ -47,6 +49,7 @@ class AccountServiceTest {
         accountService.goDormant(1L);
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.DORMANT);
+        verify(refreshTokenService).deleteAllForUser(1L); // 🗓️ 휴면 시 RT 전체 폐기
     }
 
     @Test
@@ -64,6 +67,7 @@ class AccountServiceTest {
         assertThat(user.getCampus()).isNull();
         // 동일 MM 계정으로 재로그인 시 매칭되지 않도록 mmUserId가 치환됨
         assertThat(user.getMmUserId()).startsWith("withdrawn-");
+        verify(refreshTokenService).deleteAllForUser(1L); // 🗓️ 탈퇴 시 RT 전체 폐기
     }
 
     private void setId(Object obj, Long id) {

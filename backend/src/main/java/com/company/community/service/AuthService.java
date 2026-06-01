@@ -1,11 +1,14 @@
 package com.company.community.service;
 
 import com.company.community.client.MattermostClient;
+import com.company.community.domain.RefreshToken;
 import com.company.community.domain.User;
 import com.company.community.domain.UserRole;
 import com.company.community.domain.UserStatus;
 import com.company.community.dto.LoginResponse;
 import com.company.community.dto.MattermostUser;
+import com.company.community.dto.TokenPair;
+import com.company.community.exception.InvalidCredentialsException;
 import com.company.community.repository.UserRepository;
 import com.company.community.security.JwtProvider;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +23,7 @@ public class AuthService {
     private final MattermostClient mmClient;
     private final UserRepository userRepository;
     private final JwtProvider jwtProvider;
+    private final RefreshTokenService refreshTokenService; // 🗓️ 2026-06-02: AT+RT 발급/회전
 
     // M-NEW-6: ADMIN으로 승격할 MM username 목록(콤마 구분). 미설정이면 빈 값 → 승격 없음.
     // @RequiredArgsConstructor 대상이 아니므로 단위 테스트에서는 null로 남고 승격 로직은 건너뛴다.
@@ -62,9 +66,38 @@ public class AuthService {
         }
 
         // (#1) role을 JWT 클레임에 포함 (복구된 상태/권한 반영)
-        String jwt = jwtProvider.generateToken(user.getId(), user.getStatus(), user.getRole());
+        // 🗓️ 2026-06-02: 짧은 Access Token + DB 저장 Refresh Token 동시 발급
+        String accessToken = jwtProvider.generateToken(user.getId(), user.getStatus(), user.getRole());
+        String refreshToken = refreshTokenService.issue(user);
 
-        return new LoginResponse(jwt, isNewUser);
+        return new LoginResponse(accessToken, refreshToken, isNewUser);
+    }
+
+    /**
+     * 🗓️ 2026-06-02: POST /api/auth/refresh — RT로 새 Access Token 재발급(+RT 회전).
+     * H-NEW-2와 동일하게 현재 DB 상태로 재검증한다(ACTIVE/PENDING만 허용, DORMANT/WITHDRAWN은 거부).
+     * RT가 없거나 무효/만료면 InvalidCredentialsException(→401).
+     */
+    @Transactional
+    public TokenPair refresh(String rawRefreshToken) {
+        RefreshToken token = refreshTokenService.findValid(rawRefreshToken);
+        User user = token.getUser();
+
+        UserStatus status = user.getStatus();
+        if (status != UserStatus.ACTIVE && status != UserStatus.PENDING) {
+            // 탈퇴/휴면 계정 — 재발급 거부(정상 흐름에선 RT가 이미 삭제됐지만 방어적으로 차단)
+            throw new InvalidCredentialsException("세션이 만료되었습니다. 다시 로그인해주세요.");
+        }
+
+        String newRefreshToken = refreshTokenService.rotate(token); // 1회용 회전
+        String newAccessToken = jwtProvider.generateToken(user.getId(), status, user.getRole());
+        return new TokenPair(newAccessToken, newRefreshToken);
+    }
+
+    /** 🗓️ 2026-06-02: 로그아웃 — 제시된 RT만 DB에서 삭제(단일 세션 종료). */
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        refreshTokenService.deleteByRawToken(rawRefreshToken);
     }
 
     // app.admin.bootstrap-usernames(콤마 구분)에 포함된 MM username인지 — null-safe

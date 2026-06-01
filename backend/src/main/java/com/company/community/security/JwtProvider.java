@@ -11,19 +11,24 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.util.Date;
 
 @Component
 public class JwtProvider {
 
-    private static final long EXPIRATION_MS = 1000L * 60 * 60 * 24; // 24시간
     private static final int MIN_SECRET_BYTES = 32; // HS256 = 256bit
 
     // §5-9: 서명 키를 1회만 생성하고, JWT_SECRET이 256bit 미만이면 기동 시점에 fail-fast.
     // (기존엔 매 호출 Keys.hmacShaKeyFor(secret.getBytes()) → 약한 키는 첫 로그인 시점에야 WeakKeyException)
     private final SecretKey key;
 
-    public JwtProvider(@Value("${jwt.secret}") String secret) {
+    // 🗓️ 2026-06-02: Access Token 수명을 app.jwt.access-ttl(기본 30m)로 외부화·단축(기존 24h).
+    // 짧은 AT는 탈취 노출 창을 줄이고, 재발급은 DB 저장 Refresh Token(/api/auth/refresh)이 담당한다.
+    private final long accessTtlMs;
+
+    public JwtProvider(@Value("${jwt.secret}") String secret,
+                       @Value("${app.jwt.access-ttl:30m}") Duration accessTtl) {
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
         if (keyBytes.length < MIN_SECRET_BYTES) {
             throw new IllegalStateException(
@@ -31,6 +36,7 @@ public class JwtProvider {
                             + keyBytes.length + " bytes. Set a longer JWT_SECRET.");
         }
         this.key = Keys.hmacShaKeyFor(keyBytes);
+        this.accessTtlMs = accessTtl.toMillis();
     }
 
     /**
@@ -43,7 +49,7 @@ public class JwtProvider {
                 .claim("status", status.name())
                 .claim("role", role.name())    // (#1) role 클레임 추가
                 .setIssuedAt(new Date())
-                .setExpiration(new Date(System.currentTimeMillis() + EXPIRATION_MS))
+                .setExpiration(new Date(System.currentTimeMillis() + accessTtlMs))
                 .signWith(key, SignatureAlgorithm.HS256)
                 .compact();
     }

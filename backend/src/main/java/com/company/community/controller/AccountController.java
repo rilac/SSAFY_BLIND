@@ -24,8 +24,10 @@ public class AccountController {
     @PostMapping("/dormant")
     public ResponseEntity<Void> goDormant(@AuthenticationPrincipal User user) {
         accountService.goDormant(user.getId());
+        // 🗓️ 2026-06-02: access/refresh 쿠키 둘 다 만료
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredJwtCookie().toString())
+                .header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredAccessCookie().toString())
+                .header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredRefreshCookie().toString())
                 .build();
     }
 
@@ -35,8 +37,10 @@ public class AccountController {
     @DeleteMapping
     public ResponseEntity<Void> withdraw(@AuthenticationPrincipal User user) {
         accountService.withdraw(user.getId());
+        // 🗓️ 2026-06-02: access/refresh 쿠키 둘 다 만료
         return ResponseEntity.ok()
-                .header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredJwtCookie().toString())
+                .header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredAccessCookie().toString())
+                .header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredRefreshCookie().toString())
                 .build();
     }
 }
