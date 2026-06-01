@@ -1,10 +1,13 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, ThumbsUp, Bookmark, Flag, Eye, Pencil, Trash2 } from 'lucide-react';
 import api from '../api/client';
 import ReportModal from '../components/ReportModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AlertDialog from '../components/AlertDialog';
+// [FEATURE:markdown-rendering] 마크다운 렌더러는 상세 페이지에서만 필요 → lazy 로드(초기 번들에서 분리)
+const Markdown = lazy(() => import('../components/Markdown'));
+// [/FEATURE:markdown-rendering]
 import { formatTimestamp, formatNumber } from '../lib/format';
 import { categoryLabel } from '../lib/categories';
 
@@ -225,7 +228,11 @@ export default function PostDetailPage() {
             {isEdited && <span className="opacity-70">(수정됨)</span>}
           </div>
 
-          <p className="text-sm leading-relaxed whitespace-pre-wrap mb-6">{post.content}</p>
+          {/* [FEATURE:markdown-rendering] 본문을 마크다운으로 렌더링(기존 평문 whitespace-pre-wrap 대체) */}
+          <Suspense fallback={<p className="text-sm leading-relaxed whitespace-pre-wrap mb-6">{post.content}</p>}>
+            <Markdown className="text-sm leading-relaxed mb-6">{post.content}</Markdown>
+          </Suspense>
+          {/* [/FEATURE:markdown-rendering] */}
 
           <div className="flex items-center gap-2 pt-4 border-t border-border">
             <button

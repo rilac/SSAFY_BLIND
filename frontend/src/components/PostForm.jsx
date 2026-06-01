@@ -53,7 +53,14 @@ export default function PostForm({ initialValues, submitLabel, submitting, error
 
       {/* Content */}
       <div>
-        <label className="block text-sm font-mono mb-2">내용</label>
+        {/* [FEATURE:markdown-rendering] 마크다운 작성 힌트 */}
+        <label className="block text-sm font-mono mb-2">
+          내용
+          <span className="ml-2 text-xs text-muted-foreground">
+            마크다운 지원 · `코드` ```코드블록``` # 제목 **굵게** - 목록
+          </span>
+        </label>
+        {/* [/FEATURE:markdown-rendering] */}
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
