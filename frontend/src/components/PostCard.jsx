@@ -1,4 +1,4 @@
-import { Flag, Eye, ThumbsUp, MessageSquare, Bookmark } from 'lucide-react';
+import { Flag, Eye, ThumbsUp, MessageSquare, Bookmark, CheckCircle2 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept]
 import { formatTimestamp, formatNumber } from '../lib/format';
 import { categoryLabel } from '../lib/categories';
 
@@ -19,6 +19,13 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
           </span>
           <span className="text-muted-foreground opacity-50">•</span>
           <span className="text-muted-foreground">{formatTimestamp(post.createdAt)}</span>
+          {/* [FEATURE:qna-accept] 해결됨 배지 — 채택된 답변이 있는 글 */}
+          {post.solved && (
+            <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+              <CheckCircle2 size={12} /> 해결됨
+            </span>
+          )}
+          {/* [/FEATURE:qna-accept] */}
         </div>
 
         <button

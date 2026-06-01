@@ -38,3 +38,27 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 3. `npm --prefix frontend uninstall react-markdown remark-gfm remark-breaks rehype-highlight`.
 
 **미적용(후속 후보)**: 댓글 마크다운(현재 단일 라인 input), 피드 카드 미리보기는 본문 스니펫 미표시라 변경 없음.
+
+---
+
+## qna-accept — Q&A 답변 채택/해결됨 (2026-06-02)
+
+§6-5 A 2순위. QUESTION 글의 작성자가 답변(댓글) 하나를 "채택"하고 "해결됨" 배지를 노출(StackOverflow식). **백엔드 + 프론트엔드.**
+
+**범위/동작**
+- 데이터: `Post.acceptedCommentId`(Long, nullable, FK 없음). null이면 미해결. Flyway **V2** 마이그레이션으로 `posts.accepted_comment_id` 컬럼 추가.
+- API: `POST /api/posts/{postId}/comments/{commentId}/accept` — **토글**(같은 답변 재요청 시 해제). 서버 검증: QUESTION 글(400 InvalidState) + 질문 작성자(403 Forbidden) + 댓글이 해당 글 소속(404).
+- 채택 댓글 삭제 시 `Post.clearAcceptedAnswer()`로 정리(댕글링 방지) — `CommentService.deleteComment` + 프론트 동기화.
+- UI: 상세 페이지 "해결됨" 배지 + 댓글별 "채택/채택 해제" 토글 버튼(작성자·QUESTION 한정) + "채택된 답변" 강조. 피드 카드 "해결됨" 배지(`PostListResponse.solved`).
+
+**마커 위치 (`[FEATURE:qna-accept]`)**
+- 백엔드: `domain/Post.java`(필드+`acceptAnswer`/`clearAcceptedAnswer`), `service/CommentService.java`(`toggleAcceptAnswer`+삭제 정리+imports), `controller/CommentController.java`(accept 엔드포인트+import), `dto/PostResponse.java`(`acceptedCommentId`), `dto/PostListResponse.java`(`solved`).
+- (신규) `dto/AcceptAnswerResponse.java`, `resources/db/migration/V2__add_accepted_comment.sql`, `test/CommentServiceTest.java` — 파일 전체.
+- 프론트: `pages/PostDetailPage.jsx`(아이콘 import·핸들러·해결됨 배지·댓글 채택 UI), `components/PostCard.jsx`(아이콘 import·해결됨 배지).
+
+**롤백 절차**
+1. 위 파일들에서 `[FEATURE:qna-accept]` 마커 블록 제거(`PostResponse`/`PostListResponse` 생성자 인자, import 라인 포함).
+2. 신규 파일 3종 삭제(`AcceptAnswerResponse.java`, `V2__add_accepted_comment.sql`, `CommentServiceTest.java`).
+3. DB: `alter table posts drop column accepted_comment_id;` (이미 V2 적용된 환경) — 또는 V2 미적용이면 불필요.
+
+**미적용(후속 후보)**: 채택 시 답변자에게 알림, QUESTION 외 카테고리 확장.

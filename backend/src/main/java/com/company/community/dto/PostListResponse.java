@@ -36,6 +36,11 @@ public class PostListResponse {
     @JsonProperty("isBookmarked")
     private boolean isBookmarked;
 
+    // [FEATURE:qna-accept] 해결됨 여부(채택된 답변 존재). 피드 카드 "해결됨" 배지용.
+    @JsonProperty("solved")
+    private boolean solved;
+    // [/FEATURE:qna-accept]
+
     // ★ 가명(닉네임·기수·지역)만 노출. author는 호출부에서 배치 조회한 작성자 User.
     public static PostListResponse of(Post post, long commentCount, Long currentUserId,
                                       boolean isLiked, long likeCount, boolean isBookmarked, User author) {
@@ -50,7 +55,8 @@ public class PostListResponse {
                 post.getAuthor().getId().equals(currentUserId),
                 isLiked,
                 likeCount,
-                isBookmarked
+                isBookmarked,
+                post.getAcceptedCommentId() != null // [FEATURE:qna-accept] solved
         );
     }
 }

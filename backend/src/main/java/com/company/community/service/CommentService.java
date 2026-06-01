@@ -2,11 +2,14 @@ package com.company.community.service;
 
 import com.company.community.domain.Comment;
 import com.company.community.domain.Post;
+import com.company.community.domain.PostCategory; // [FEATURE:qna-accept]
 import com.company.community.domain.User;
 import com.company.community.domain.UserRole;
+import com.company.community.dto.AcceptAnswerResponse; // [FEATURE:qna-accept]
 import com.company.community.dto.CommentCreateRequest;
 import com.company.community.dto.CommentResponse;
 import com.company.community.exception.ForbiddenException;
+import com.company.community.exception.InvalidStateException; // [FEATURE:qna-accept]
 import com.company.community.repository.CommentRepository;
 import com.company.community.repository.PostRepository;
 import com.company.community.repository.UserRepository;
@@ -104,6 +107,42 @@ public class CommentService {
             throw new ForbiddenException("본인의 댓글만 삭제할 수 있습니다.");
         }
 
+        // [FEATURE:qna-accept] 채택된 답변이 삭제되면 글의 채택 상태를 정리(댕글링 방지)
+        Post post = comment.getPost();
+        if (commentId.equals(post.getAcceptedCommentId())) {
+            post.clearAcceptedAnswer();
+        }
+        // [/FEATURE:qna-accept]
+
         commentRepository.delete(comment);
     }
+
+    // [FEATURE:qna-accept] 답변 채택 토글 — QUESTION 글 + 질문 작성자만. 같은 답변 재요청 시 해제.
+    @Transactional
+    public AcceptAnswerResponse toggleAcceptAnswer(Long userId, Long postId, Long commentId) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+
+        if (post.getCategory() != PostCategory.QUESTION) {
+            throw new InvalidStateException("질문 글에서만 답변을 채택할 수 있습니다.");
+        }
+        if (!post.getAuthor().getId().equals(userId)) {
+            throw new ForbiddenException("질문 작성자만 답변을 채택할 수 있습니다.");
+        }
+
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 댓글입니다."));
+        if (!comment.getPost().getId().equals(postId)) {
+            throw new NoSuchElementException("해당 게시글의 댓글이 아닙니다.");
+        }
+
+        // 토글: 이미 채택된 답변이면 해제, 아니면 채택(교체)
+        if (commentId.equals(post.getAcceptedCommentId())) {
+            post.clearAcceptedAnswer();
+        } else {
+            post.acceptAnswer(commentId);
+        }
+        return AcceptAnswerResponse.from(post.getAcceptedCommentId());
+    }
+    // [/FEATURE:qna-accept]
 }

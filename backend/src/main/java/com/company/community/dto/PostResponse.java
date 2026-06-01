@@ -38,6 +38,10 @@ public class PostResponse {
     @JsonProperty("isBookmarked")
     private boolean isBookmarked;
 
+    // [FEATURE:qna-accept] 채택된 답변(댓글) id. null이면 미해결. QUESTION 글에서만 의미.
+    private Long acceptedCommentId;
+    // [/FEATURE:qna-accept]
+
     // ★ 가명(닉네임·기수·지역)만 노출 — mmUserId/email 등 실제 신원은 포함하지 않는다.
     // author는 호출부에서 배치 조회한 작성자 User를 전달받는다.
     public static PostResponse of(Post post, Long currentUserId, boolean isLiked,
@@ -62,7 +66,8 @@ public class PostResponse {
                 post.getAuthor().getId().equals(currentUserId),
                 isLiked,
                 likeCount,
-                isBookmarked
+                isBookmarked,
+                post.getAcceptedCommentId() // [FEATURE:qna-accept]
         );
     }
 }

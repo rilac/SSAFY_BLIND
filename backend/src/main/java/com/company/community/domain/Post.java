@@ -49,6 +49,11 @@ public class Post {
     @Builder.Default
     private boolean reviewed = false;
 
+    // [FEATURE:qna-accept] QUESTION 글의 채택된 답변(댓글) id. null이면 미해결.
+    // FK 없이 단순 Long — 채택 댓글 삭제 시 CommentService가 이 값을 정리한다(댕글링 방지).
+    private Long acceptedCommentId;
+    // [/FEATURE:qna-accept]
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -88,4 +93,14 @@ public class Post {
         this.hidden = false;
         this.reviewed = true;
     }
+
+    // [FEATURE:qna-accept] 답변 채택/해제 — @Setter 금지, 도메인 메서드로만 변경
+    public void acceptAnswer(Long commentId) {
+        this.acceptedCommentId = commentId;
+    }
+
+    public void clearAcceptedAnswer() {
+        this.acceptedCommentId = null;
+    }
+    // [/FEATURE:qna-accept]
 }

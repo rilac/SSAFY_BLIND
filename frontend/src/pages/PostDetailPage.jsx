@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ThumbsUp, Bookmark, Flag, Eye, Pencil, Trash2 } from 'lucide-react';
+import { ArrowLeft, ThumbsUp, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept]
 import api from '../api/client';
 import ReportModal from '../components/ReportModal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -142,10 +142,29 @@ export default function PostDetailPage() {
     try {
       await api.delete(`/posts/${id}/comments/${commentId}`);
       setComments((prev) => prev.filter((c) => c.id !== commentId));
+      // [FEATURE:qna-accept] 채택된 답변을 삭제하면 해결 상태도 풀린다(서버와 동기화)
+      setPost((prev) => (prev?.acceptedCommentId === commentId ? { ...prev, acceptedCommentId: null } : prev));
+      // [/FEATURE:qna-accept]
     } catch {
       setNotice({ title: '댓글 삭제 실패', message: '댓글 삭제에 실패했습니다.' });
     }
   };
+
+  // [FEATURE:qna-accept] 답변 채택 토글 — QUESTION 글 작성자만(버튼은 조건부 노출), 서버가 권한 재검증
+  const [acceptLoading, setAcceptLoading] = useState(null); // 토글 중인 commentId
+  const handleAcceptToggle = async (commentId) => {
+    if (acceptLoading) return;
+    setAcceptLoading(commentId);
+    try {
+      const res = await api.post(`/posts/${id}/comments/${commentId}/accept`);
+      setPost((prev) => ({ ...prev, acceptedCommentId: res.data.acceptedCommentId }));
+    } catch (e) {
+      setNotice({ title: '채택 실패', message: e.response?.data?.message || '답변 채택에 실패했습니다.' });
+    } finally {
+      setAcceptLoading(null);
+    }
+  };
+  // [/FEATURE:qna-accept]
 
   const backBtn = (
     <button
@@ -190,6 +209,13 @@ export default function PostDetailPage() {
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
               <span className="text-primary">[{categoryLabel(post.category)}]</span>
+              {/* [FEATURE:qna-accept] 해결됨 배지 (채택된 답변 존재 시) */}
+              {post.acceptedCommentId && (
+                <span className="flex items-center gap-1 text-green-600 dark:text-green-400">
+                  <CheckCircle2 size={12} /> 해결됨
+                </span>
+              )}
+              {/* [/FEATURE:qna-accept] */}
               <span className="text-muted-foreground">{post.author?.nickname}</span>
               <span className="text-muted-foreground opacity-50">•</span>
               <span className="text-muted-foreground">
@@ -279,25 +305,61 @@ export default function PostDetailPage() {
             <p className="text-xs font-mono text-muted-foreground mb-4">아직 댓글이 없습니다.</p>
           ) : (
             <div className="space-y-3 mb-4">
-              {comments.map((comment) => (
-                <div key={comment.id} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm flex-1">{comment.content}</p>
-                    {comment.isMine && (
-                      <button
-                        onClick={() => handleDeleteComment(comment.id)}
-                        className="text-xs font-mono text-destructive hover:opacity-80 transition-opacity shrink-0"
-                      >
-                        삭제
-                      </button>
+              {comments.map((comment) => {
+                // [FEATURE:qna-accept] 채택 상태/권한 (서버가 권한 재검증 — 버튼은 UX용 조건부 노출)
+                const accepted = post.acceptedCommentId === comment.id;
+                const canAccept = post.isMine && post.category === 'QUESTION';
+                // [/FEATURE:qna-accept]
+                return (
+                  <div
+                    key={comment.id}
+                    className={`border-b border-border pb-3 last:border-b-0 last:pb-0${
+                      accepted ? ' border-l-2 border-l-green-500 pl-3' : '' // [FEATURE:qna-accept]
+                    }`}
+                  >
+                    {/* [FEATURE:qna-accept] 채택된 답변 라벨 */}
+                    {accepted && (
+                      <div className="flex items-center gap-1 text-xs font-mono text-green-600 dark:text-green-400 mb-1">
+                        <CheckCircle2 size={12} /> 채택된 답변
+                      </div>
                     )}
+                    {/* [/FEATURE:qna-accept] */}
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-sm flex-1">{comment.content}</p>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {/* [FEATURE:qna-accept] 질문 작성자만 채택 토글 버튼 */}
+                        {canAccept && (
+                          <button
+                            onClick={() => handleAcceptToggle(comment.id)}
+                            disabled={acceptLoading === comment.id}
+                            className={`flex items-center gap-1 text-xs font-mono transition-colors disabled:opacity-50 ${
+                              accepted
+                                ? 'text-green-600 dark:text-green-400'
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                          >
+                            <CheckCircle2 size={12} fill={accepted ? 'currentColor' : 'none'} />
+                            {accepted ? '채택 해제' : '채택'}
+                          </button>
+                        )}
+                        {/* [/FEATURE:qna-accept] */}
+                        {comment.isMine && (
+                          <button
+                            onClick={() => handleDeleteComment(comment.id)}
+                            className="text-xs font-mono text-destructive hover:opacity-80 transition-opacity"
+                          >
+                            삭제
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground mt-1 block">
+                      {comment.author?.nickname} · {comment.author?.cohort} {comment.author?.campus} ·{' '}
+                      {formatTimestamp(comment.createdAt)}
+                    </span>
                   </div>
-                  <span className="text-[10px] font-mono text-muted-foreground mt-1 block">
-                    {comment.author?.nickname} · {comment.author?.cohort} {comment.author?.campus} ·{' '}
-                    {formatTimestamp(comment.createdAt)}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 

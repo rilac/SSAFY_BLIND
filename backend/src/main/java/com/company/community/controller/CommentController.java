@@ -1,6 +1,7 @@
 package com.company.community.controller;
 
 import com.company.community.domain.User;
+import com.company.community.dto.AcceptAnswerResponse; // [FEATURE:qna-accept]
 import com.company.community.dto.CommentCreateRequest;
 import com.company.community.dto.CommentResponse;
 import com.company.community.service.CommentService;
@@ -59,4 +60,18 @@ public class CommentController {
         commentService.deleteComment(user.getId(), user.getRole(), postId, commentId);
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * [FEATURE:qna-accept] POST /api/posts/{postId}/comments/{commentId}/accept
+     * 답변 채택 토글 — QUESTION 글의 작성자만. 같은 답변 재요청 시 채택 해제.
+     */
+    @PostMapping("/{commentId}/accept")
+    public ResponseEntity<AcceptAnswerResponse> acceptAnswer(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long postId,
+            @PathVariable Long commentId) {
+
+        return ResponseEntity.ok(commentService.toggleAcceptAnswer(user.getId(), postId, commentId));
+    }
+    // [/FEATURE:qna-accept]
 }
