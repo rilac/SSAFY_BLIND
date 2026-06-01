@@ -17,10 +17,40 @@
 
 > 재개용 체크리스트. 상세는 각 섹션 참조. 현재 모든 작업트리 변경은 **검증 완료(테스트/빌드 통과)** 상태.
 
-1. ✅ **Phase E 8기능 + UX 버그픽스 전부 커밋·푸시 완료**(`origin/main` — reactions `cdd7d4d`까지). 미커밋 없음.
-2. **다음 기능 (문서 권장 순)** — 남은 §6 백로그 중 택1: **모더레이션 강화**(소프트삭제+휴지통·감사 로그·강제 숨김, §6 운영품질) 또는 **북마크 폴더/메모**(§6-4) 또는 **주간 다이제스트(MM DM)**(§6-3) 등. 착수 시 롤백 마커 + `FEATURES.md` 인덱싱.
+1. ✅ **Phase E 8기능 + UX 버그픽스 전부 커밋·푸시 완료**(`origin/main` — reactions `cdd7d4d`, 본 계획 doc 커밋까지). 미커밋 없음.
+2. ⭐ **다음 기능 (확정 — 내일 바로 구현): 주간 인기글 다이제스트(weekly-digest)**. 스펙 확정 완료 → 상세는 아래 [🗓️ 계획 — 주간 인기글 다이제스트](#️-계획--주간-인기글-다이제스트-weekly-digest-내일-구현) 섹션. 착수 시 롤백 마커 `[FEATURE:weekly-digest]` + `FEATURES.md` 인덱싱. (그 다음 후보: 모더레이션 강화 / 북마크 폴더.)
 3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1~V5 자동 적용**(`flyway_schema_history`; `accepted_comment_id`·`parent_id`·`poll_*`·`post_likes.reaction_type`). op-alias·라운지·unread-new는 스키마 무변경. E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료). ⚠️ V4·V5는 수기 DDL이라 실 MySQL `validate` 최종 확인 권장(V5는 클론 테이블로 DDL 검증 완료).
 4. **테스트 폭(여력 시)** — 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (CommentService 단위[채택·별칭·대댓글]·PostService 단위[scope]·PollService 단위·삭제 통합·라운지 @DataJpaTest·헬스/인가 스모크·RefreshTokenService는 완료)
+
+---
+
+## 🗓️ 계획 — 주간 인기글 다이제스트 (weekly-digest, 내일 구현)
+
+§6-3/§6-5 C. **지난 7일 인기글 Top N을 매주 월요일 09:10에 자동 집계해 모든 ACTIVE 유저에게 앱 내 알림으로 발송.** 사용자와 스펙 확정 완료(2026-06-02). **아직 코드 미작성 — 내일 구현.** 마커 `[FEATURE:weekly-digest]` + `FEATURES.md`.
+
+### 확정 스펙
+- **발송 채널**: 앱 내 알림(기존 `NotificationService` + `NotificationType.SYSTEM` 재사용). MM DM/이메일 아님.
+- **기간**: 최근 7일(작성일 기준).
+- **인기 점수**: `viewCount*1 + 반응수*2 + 댓글수*3` (조회:반응:댓글 = **1:2:3**) 내림차순. Top N(기본 5).
+- **스케줄**: 매주 월요일 **09:10** — Spring cron `0 10 9 * * MON`. (외부화: `app.weekly-digest.cron`, 단일 인스턴스 전제 — RefreshToken 정리 스케줄러와 동일 방식.)
+- **수신 거부 없음**(앱 내 알림이라 부담 적음 — opt-out 플래그 미도입).
+- **익명 유지**: 다이제스트는 글 제목/링크만, 작성자 신원 미노출.
+
+### 구현 계획(파일·요지)
+- (신규) `scheduler/WeeklyDigestScheduler` — `@Scheduled(cron=app.weekly-digest.cron)` → `WeeklyDigestService.sendWeeklyDigest()`. `CommunityApplication`은 이미 `@EnableScheduling`.
+- (신규) `service/WeeklyDigestService` — ① `PostRepository`로 최근 7일 인기 Top N 조회 ② ACTIVE 유저 전체 조회 ③ 각 유저에게 SYSTEM 알림 1건 생성(saveAll).
+- `repository/PostRepository` — 점수 랭킹 쿼리 추가(예: `@Query("SELECT p FROM Post p LEFT JOIN PostLike pl ON pl.post=p LEFT JOIN Comment c ON c.post=p WHERE p.hidden=false AND p.createdAt>=:since GROUP BY p ORDER BY (p.viewCount*1 + COUNT(DISTINCT pl)*2 + COUNT(DISTINCT c)*3) DESC")` + `Pageable`(Top N). **COUNT은 DISTINCT 필수**(다중 LEFT JOIN 카티전 곱 방지).
+- `repository/UserRepository` — ACTIVE 유저 조회(`findByStatus(UserStatus.ACTIVE)` 추가 또는 기존 확인).
+- `service/NotificationService` — `notifyDigest(recipient, message, topPostId)`(SYSTEM 타입) 추가. **message는 varchar(255)** → 상위 제목 3개 정도만 + 글자수 truncate. `postId`는 단일 Long이라 **1위 글로 링크**(클릭 시 1위 글로 이동).
+- 프론트: **변경 없음 예상** — 알림 종은 TopBar에 이미 있고 SYSTEM 알림도 동일 렌더·`postId` 클릭 이동. (확인만)
+- 테스트: `WeeklyDigestService` 단위(점수순 Top N + 유저별 알림 생성). 랭킹 쿼리는 @DataJpaTest(H2) 고려.
+- **스키마 변경 없음**(notifications 테이블·SYSTEM enum 재사용) → **Flyway 마이그레이션 불필요**.
+
+### 구현 시 주의/열린 점
+- 알림 message 255자 제한 → 제목 N개·길이 truncate 설계.
+- 인기글 0건(지난 주 글 없음)이면 발송 스킵.
+- 재실행 중복(스케줄러 재기동 시) — 단일 인스턴스 전제로 MVP는 가드 생략(필요 시 "이번 주 이미 발송" 체크 후속).
+- 검증: 단위 테스트 + 수동 트리거(테스트용으로 cron 임박 시각 설정하거나 메서드 직접 호출)로 알림 생성 확인.
 
 ---
 
@@ -304,7 +334,8 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 - ✅ **익명 투표/설문**(완료·커밋 `2f1ef16` — `FEATURES.md` poll, Flyway V4).
 - ✅ **읽음 표시/안 읽은 새 글 배지**(완료·커밋 `45a3567` — `FEATURES.md` unread-new, 스키마 무변경·PostView 재사용).
 - ✅ **다양한 반응(좋아요/도움돼요/정보/공감)**(완료·커밋 `cdd7d4d` — `FEATURES.md` reactions, Flyway V5).
-- 남음(§6 백로그): 모더레이션 강화(소프트삭제+휴지통·감사 로그·강제 숨김), 북마크 폴더/메모, 주간 다이제스트, 알림 확장/실시간, MM DM 연동 등. (스터디/팀원 모집은 익명 보드 특성상 제외.) 상세는 V2 §6.
+- ⭐ **주간 인기글 다이제스트(weekly-digest)** — 스펙 확정, **내일 구현 예정**(위 [🗓️ 계획](#️-계획--주간-인기글-다이제스트-weekly-digest-내일-구현) 섹션).
+- 남음(§6 백로그): 모더레이션 강화(소프트삭제+휴지통·감사 로그·강제 숨김), 북마크 폴더/메모, 알림 확장/실시간, MM DM 연동 등. (스터디/팀원 모집은 익명 보드 특성상 제외.) 상세는 V2 §6.
 
 ---
 
