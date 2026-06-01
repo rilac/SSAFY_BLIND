@@ -4,7 +4,7 @@
 분석/계획 문서는 [MoreDevelopments.md](./MoreDevelopments.md)(1차) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md)(2차)이며, 본 문서는 **무엇을 실제로 구현했는지**를 한곳에 모은 진행 현황입니다.
 
 - 최종 업데이트: 2026-06-02
-- Git: **Phase 0~D + Access/Refresh + Flyway(M-NEW-7) 커밋·푸시 완료**(`origin/main` — 최신 `178e6c3`). **Phase E(마크다운 렌더링 + Q&A 채택 + OP/익명 별칭 + 기수/캠퍼스 라운지)는 구현 완료·미커밋**(로컬 작업트리 — 커밋 대기).
+- Git: **Phase 0~D + Access/Refresh + Flyway(M-NEW-7) + Phase E 4기능 커밋·푸시 완료**(`origin/main` — 최신 `72667be`). Phase E는 기능별 4커밋(`2805f0f` markdown → `e2e6c17` qna-accept → `0ea272b` op-alias → `72667be` cohort-campus-lounge).
 - 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway**) → **Phase E 진행 중**(✅ 마크다운/코드블록 · ✅ Q&A 채택/해결됨 · ✅ OP 표시+글 단위 익명 별칭 · ✅ 기수/캠퍼스 라운지) → **남은 것: Phase E 나머지(모더레이션 강화·대댓글/리액션 등) + 테스트 폭**
 - ✅ **Access/Refresh 토큰 분리 구현 완료(2026-06-02)**: 짧은 Access(30m, stateless) + DB 저장 Refresh(14d, `refresh_tokens`) + `/api/auth/refresh` 회전 재발급 + 만료 정리 스케줄러. 검증: backend `./gradlew.bat test` BUILD SUCCESSFUL, frontend `npm run build` 성공. *(아래 "✅ Refresh Token 도입" 섹션)*
 - ✅ **M-NEW-7 Flyway 도입 완료(2026-06-02)**: Hibernate가 생성한 `V1__baseline.sql`(=validate와 정확히 일치) + `baseline-on-migrate`로 기존/신규 DB 모두 안전 처리. dev/prod 모두 Flyway ON·`ddl-auto: validate`, 테스트(H2)는 Flyway OFF. **배포 전 수동 DDL 폐기.** *(아래 "✅ M-NEW-7 Flyway" 섹션)*
@@ -17,13 +17,8 @@
 
 > 재개용 체크리스트. 상세는 각 섹션 참조. 현재 모든 작업트리 변경은 **검증 완료(테스트/빌드 통과)** 상태.
 
-1. **미커밋 정리 (먼저)** — Phase E 네 기능이 로컬 미커밋. 논리 단위 4커밋 권장 후 push:
-   - `feat: 게시글 마크다운/코드블록 렌더링 (Phase E)` — `FEATURES.md` markdown-rendering 범위
-   - `feat: Q&A 답변 채택/해결됨 (Phase E)` — `FEATURES.md` qna-accept 범위 (+ Flyway `V2`)
-   - `feat: 댓글 글쓴이(OP) 표시 + 글 단위 익명 별칭 (Phase E)` — `FEATURES.md` op-alias 범위 (스키마 무변경)
-   - `feat: 기수/캠퍼스 스코프 필터·라운지 (Phase E)` — `FEATURES.md` cohort-campus-lounge 범위 (스키마 무변경)
-   - 확인: `git status`. (Access/Refresh·Flyway는 이미 `178e6c3`로 푸시됨)
-2. **다음 기능 (문서 권장 순)** — Phase E A/B 우선순위 소진. 남은 §6 백로그 중 택1: **모더레이션 강화**(소프트삭제+휴지통·감사 로그·강제 숨김, §6 운영품질) 또는 **대댓글/리액션 확장**(§6-1/6-3) 또는 **익명 투표/설문**(§6-5 B ☆). 착수 시 롤백 마커 + `FEATURES.md` 인덱싱.
+1. ✅ **Phase E 4기능 커밋·푸시 완료**(`origin/main` `72667be`) — 기능별 4커밋(`2805f0f`/`e2e6c17`/`0ea272b`/`72667be`). 각 커밋 범위·롤백은 `FEATURES.md` 참조.
+2. **다음 기능 (문서 권장 순)** — Phase E A/B ★ 우선순위 소진. 남은 §6 백로그 중 택1: **모더레이션 강화**(소프트삭제+휴지통·감사 로그·강제 숨김, §6 운영품질) 또는 **대댓글/리액션 확장**(§6-1/6-3) 또는 **익명 투표/설문**(§6-5 B ☆). 착수 시 롤백 마커 + `FEATURES.md` 인덱싱.
 3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1+V2 자동 적용**(`flyway_schema_history` 생성, `accepted_comment_id` 컬럼). op-alias·라운지는 스키마 무변경. 채택/마크다운/별칭/라운지 필터 E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료).
 4. **테스트 폭(여력 시)** — 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (CommentService 단위[채택·별칭]·PostService 단위[scope]·삭제 통합·라운지 @DataJpaTest·헬스/인가 스모크·RefreshTokenService는 완료)
 
@@ -114,7 +109,7 @@
 
 ---
 
-## ✅ Refresh Token 도입 — Access/Refresh 분리 (2026-06-02, 미커밋)
+## ✅ Refresh Token 도입 — Access/Refresh 분리 (2026-06-02, 커밋·푸시 완료)
 
 Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구조로 구현. 단일 JWT(24h)를 **짧은 Access Token(30m, stateless) + DB 저장 Refresh Token(14d)**으로 분리.
 검증: `backend`에서 `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `RefreshTokenServiceTest` 8종 + AuthService refresh 3종 + AccountService RT 폐기 검증 포함) · `frontend`에서 `npm run build` 성공.
@@ -137,7 +132,7 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 
 ---
 
-## ✅ M-NEW-7 — Flyway 스키마 마이그레이션 (2026-06-02, 미커밋)
+## ✅ M-NEW-7 — Flyway 스키마 마이그레이션 (2026-06-02, 커밋·푸시 완료)
 
 보류했던 Flyway를, **"베이스라인을 Hibernate가 생성"** 하는 방식으로 정합 리스크 없이 도입. **배포 전 수동 DDL 단계 제거.**
 검증: `backend`에서 `./gradlew.bat test` **BUILD SUCCESSFUL**(Flyway 클래스패스 존재 + 테스트(H2)는 OFF 유지 확인).
@@ -160,7 +155,7 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 
 §6 기능 백로그 착수. **여기부터는 롤백 마커**(`[FEATURE:이름]`)**+ 루트 `FEATURES.md` 인덱싱** 적용.
 
-### markdown-rendering — 게시글 본문 마크다운 + 코드블록 (2026-06-02, 미커밋)
+### markdown-rendering — 게시글 본문 마크다운 + 코드블록 (2026-06-02, 커밋·푸시 완료)
 §6-5 A "개발 교육 커뮤니티 특화" 1순위. 게시글 본문 평문 → 마크다운 렌더링 + 코드블록 syntax highlight. **프론트 전용**(본문은 평문 그대로 저장·반환, 렌더링만 마크다운화 — 백엔드 무변경). 검증: `frontend`에서 `npm run build` 성공.
 
 | 항목 | 핵심 | 파일 |
@@ -174,7 +169,7 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 **롤백**: `FEATURES.md`의 `markdown-rendering` 절차(마커 제거 + 컴포넌트 삭제 + deps uninstall).
 **후속 후보**: 댓글 마크다운(현재 단일 라인 input).
 
-### qna-accept — Q&A 답변 채택/해결됨 (2026-06-02, 미커밋)
+### qna-accept — Q&A 답변 채택/해결됨 (2026-06-02, 커밋·푸시 완료)
 §6-5 A 2순위. QUESTION 글 작성자가 답변(댓글)을 채택 → "해결됨" 배지(StackOverflow식). **백엔드+프론트**. **Flyway V2 마이그레이션 첫 실전 적용**(새 워크플로 검증). 검증: backend `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `CommentServiceTest` 6종), frontend `npm run build` 성공.
 
 | 항목 | 핵심 | 파일 |
@@ -188,7 +183,7 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 **롤백**: `FEATURES.md`의 `qna-accept` 절차.
 **후속 후보**: 채택 시 답변자 알림.
 
-### op-alias — 댓글 글쓴이(OP) 표시 + 글 단위 익명 별칭 (2026-06-02, 미커밋)
+### op-alias — 댓글 글쓴이(OP) 표시 + 글 단위 익명 별칭 (2026-06-02, 커밋·푸시 완료)
 §6-5 B 1순위. 닉네임 비유일성(H-anon)으로 스레드에서 글쓴이/동일인 식별이 혼동되는 문제를 **글 단위 일관 익명 별칭**(에타식)으로 해결. **별칭은 서버에서 `user_id` 기준 계산**(프론트에 신원 미노출). 글쓴이 → "글쓴이", 그 외는 첫 등장 순 "익명1·2…"(같은 유저=같은 별칭). 사용자 결정으로 **댓글 스레드에서 닉네임을 별칭으로 대체**(기수·캠퍼스 유지), 피드·상세 헤더 닉네임은 유지. 검증: backend `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `CommentServiceAliasTest` 4종), frontend `npm run build` 성공(메인 번들 269KB 유지).
 
 | 항목 | 핵심 | 파일 |
@@ -201,7 +196,7 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 **롤백**: `FEATURES.md`의 `op-alias` 절차(스키마 무변경).
 **후속 후보**: 댓글 페이로드의 비-OP 닉네임 제거(진짜 페이로드 익명화), 별칭의 피드/게시글 확장.
 
-### cohort-campus-lounge — 기수/캠퍼스 스코프 필터·라운지 (2026-06-02, 미커밋)
+### cohort-campus-lounge — 기수/캠퍼스 스코프 필터·라운지 (2026-06-02, 커밋·푸시 완료)
 §6-5 B 2순위. 프로필에만 노출하던 `cohort`/`campus`를 **피드 스코프 필터**로 확장("우리 캠퍼스"·"동기"). **익명 유지·범위만 한정**(서버가 현재 유저 기준으로 해석 — 프론트는 `scope=campus|cohort`만 전달). 검증: backend `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `PostLoungeRepositoryTest` 4종 + `PostServiceTest` scope 3종), frontend `npm run build` 성공(메인 271KB).
 
 | 항목 | 핵심 | 파일 |
@@ -229,7 +224,7 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 ## 🔜 남은 작업
 
 > 즉시 다음 행동은 상단 [▶ 다음 작업 (바로 이어서 시작)](#-다음-작업-바로-이어서-시작) 참조. 아래는 전체 백로그.
-> **Phase 0~D + Access/Refresh + Flyway 완료**(앞 4개는 푸시됨, Flyway까지 `178e6c3`). **Phase E 마크다운·Q&A 채택 완료(미커밋)**.
+> **Phase 0~D + Access/Refresh + Flyway + Phase E 4기능 모두 커밋·푸시 완료**(`origin/main` 최신 `72667be`).
 
 ### 테스트 폭 (상시)
 - 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (단위[CommentService·RefreshTokenService 등]·삭제 통합·헬스/인가 스모크는 완료)
