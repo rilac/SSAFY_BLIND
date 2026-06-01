@@ -4,6 +4,7 @@ import com.company.community.domain.Post;
 import com.company.community.domain.PostCategory;
 import com.company.community.domain.PostLike;
 import com.company.community.domain.PostView;
+import com.company.community.domain.ReactionType; // [FEATURE:reactions]
 import com.company.community.domain.User;
 import com.company.community.domain.UserRole;
 import com.company.community.dto.*;
@@ -69,8 +70,8 @@ public class PostService {
         pollService.createOptions(saved, request.getPollOptions());
         PollResponse poll = pollService.buildResults(saved.getId(), userId);
         // [/FEATURE:poll]
-        // 본인 글 isMine=true, 방금 작성 — isLiked/isBookmarked=false, likeCount=0
-        return PostResponse.of(saved, userId, false, 0L, false, author, poll);
+        // 본인 글 isMine=true, 방금 작성 — 반응/스크랩 없음
+        return PostResponse.of(saved, userId, ReactionResponse.of(List.of(), null), false, author, poll); // [FEATURE:reactions]
     }
 
     /**
@@ -97,13 +98,22 @@ public class PostService {
         // 벌크 UPDATE는 관리 엔티티에 반영되지 않으므로 표시값만 +1 하여 응답에 전달
         int viewCount = post.getViewCount() + (counted ? 1 : 0);
 
-        boolean isLiked = postLikeRepository.existsByPostIdAndUserId(postId, currentUserId);
-        long likeCount = postLikeRepository.countByPostId(postId);
+        ReactionResponse reactions = buildReactions(postId, currentUserId); // [FEATURE:reactions]
         boolean isBookmarked = bookmarkRepository.existsByPostIdAndUserId(postId, currentUserId);
         PollResponse poll = pollService.buildResults(postId, currentUserId); // [FEATURE:poll]
 
-        return PostResponse.of(post, currentUserId, isLiked, likeCount, isBookmarked, post.getAuthor(), viewCount, poll);
+        return PostResponse.of(post, currentUserId, reactions, isBookmarked, post.getAuthor(), viewCount, poll);
     }
+
+    // [FEATURE:reactions] 글의 반응 집계(종류별 수 + 내 반응) 빌드 — 상세/수정/토글 공용.
+    private ReactionResponse buildReactions(Long postId, Long userId) {
+        List<Object[]> typeCounts = postLikeRepository.countByPostIdGroupByType(postId);
+        ReactionType myType = postLikeRepository.findByPostIdAndUserId(postId, userId)
+                .map(PostLike::getReactionType)
+                .orElse(null);
+        return ReactionResponse.of(typeCounts, myType);
+    }
+    // [/FEATURE:reactions]
 
     /**
      * M-NEW-5: 이번 조회를 조회수로 집계해야 하면 조회 이력을 남기고 true.
@@ -171,8 +181,8 @@ public class PostService {
 
         // 카운트/여부/작성자 배치 조회 — IN 절로 N+1 방지
         Map<Long, Long> commentCountMap = new HashMap<>();
-        Map<Long, Long> likeCountMap = new HashMap<>();
-        Set<Long> likedSet = new HashSet<>();
+        Map<Long, Long> reactionTotalMap = new HashMap<>(); // [FEATURE:reactions] 글별 총 반응 수
+        Map<Long, String> myReactionMap = new HashMap<>();   // [FEATURE:reactions] 글별 내 반응 종류
         Set<Long> bookmarkedSet = new HashSet<>();
         Map<Long, User> authorMap = new HashMap<>();
         Set<Long> pollPostIds = new HashSet<>(); // [FEATURE:poll] 투표 있는 글 id
@@ -180,9 +190,12 @@ public class PostService {
         if (!postIds.isEmpty()) {
             commentRepository.countByPostIds(postIds)
                     .forEach(row -> commentCountMap.put((Long) row[0], (Long) row[1]));
+            // [FEATURE:reactions] 총 반응 수(타입 무관) + 내가 누른 반응 종류 배치
             postLikeRepository.countByPostIds(postIds)
-                    .forEach(row -> likeCountMap.put((Long) row[0], (Long) row[1]));
-            likedSet.addAll(postLikeRepository.findLikedPostIds(postIds, currentUserId));
+                    .forEach(row -> reactionTotalMap.put((Long) row[0], (Long) row[1]));
+            postLikeRepository.findUserReactions(postIds, currentUserId)
+                    .forEach(row -> myReactionMap.put((Long) row[0], ((ReactionType) row[1]).name()));
+            // [/FEATURE:reactions]
             bookmarkedSet.addAll(bookmarkRepository.findBookmarkedPostIds(postIds, currentUserId));
             pollPostIds.addAll(pollService.hasPollPostIds(postIds)); // [FEATURE:poll]
             viewedPostIds.addAll(postViewRepository.findViewedPostIds(postIds, currentUserId)); // [FEATURE:unread-new]
@@ -199,16 +212,16 @@ public class PostService {
                 .map(post -> {
                     Long pid = post.getId();
                     long commentCount = commentCountMap.getOrDefault(pid, 0L);
-                    long likeCount = likeCountMap.getOrDefault(pid, 0L);
-                    boolean isLiked = likedSet.contains(pid);
+                    long reactionTotal = reactionTotalMap.getOrDefault(pid, 0L); // [FEATURE:reactions]
+                    String myReaction = myReactionMap.get(pid); // [FEATURE:reactions] null이면 미반응
                     boolean isBookmarked = bookmarkedSet.contains(pid);
                     User author = authorMap.get(post.getAuthor().getId());
                     // [FEATURE:unread-new] 작성자 본인 글 제외 · 미열람 + 최근이면 NEW · 연 적 있으면 읽음(isRead).
                     boolean viewed = viewedPostIds.contains(pid);
                     boolean isNew = !post.getAuthor().getId().equals(currentUserId)
                             && !viewed && post.getCreatedAt().isAfter(newCutoff);
-                    return PostListResponse.of(post, commentCount, currentUserId, isLiked, likeCount, isBookmarked,
-                            author, pollPostIds.contains(pid), isNew, viewed); // [FEATURE:poll] hasPoll · [FEATURE:unread-new] isNew/isRead
+                    return PostListResponse.of(post, commentCount, currentUserId, reactionTotal, myReaction, isBookmarked,
+                            author, pollPostIds.contains(pid), isNew, viewed); // [FEATURE:reactions]·[FEATURE:poll]·[FEATURE:unread-new]
                 })
                 .collect(Collectors.toList());
 
@@ -258,18 +271,18 @@ public class PostService {
         // 도메인 메서드로 변경 — @Setter 사용 금지
         post.update(request.getTitle(), request.getContent(), request.getCategory());
 
-        boolean isLiked = postLikeRepository.existsByPostIdAndUserId(postId, userId);
-        long likeCount = postLikeRepository.countByPostId(postId);
+        ReactionResponse reactions = buildReactions(postId, userId); // [FEATURE:reactions]
         boolean isBookmarked = bookmarkRepository.existsByPostIdAndUserId(postId, userId);
         PollResponse poll = pollService.buildResults(postId, userId); // [FEATURE:poll]
-        return PostResponse.of(post, userId, isLiked, likeCount, isBookmarked, post.getAuthor(), poll);
+        return PostResponse.of(post, userId, reactions, isBookmarked, post.getAuthor(), poll);
     }
 
     /**
-     * (#4) 좋아요 토글 + 좋아요 시 글 작성자에게 알림
+     * [FEATURE:reactions] 반응 토글 — 같은 종류 재클릭=취소, 다른 종류=변경, 처음=신규(+작성자 알림). 1인 1반응.
+     * (기존 toggleLike를 대체. like는 ReactionType.LIKE로 흡수.)
      */
     @Transactional
-    public PostLikeResponse toggleLike(Long userId, Long postId) {
+    public ReactionResponse react(Long userId, Long postId, ReactionType type) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
 
@@ -278,25 +291,23 @@ public class PostService {
 
         Optional<PostLike> existing = postLikeRepository.findByPostIdAndUserId(postId, userId);
         if (existing.isPresent()) {
-            // 이미 좋아요 → 취소
-            postLikeRepository.delete(existing.get());
-            long likeCount = postLikeRepository.countByPostId(postId);
-            return new PostLikeResponse(false, likeCount);
-        }
-
-        try {
-            postLikeRepository.save(PostLike.builder().post(post).user(user).build());
-            // 내 글이 아닐 때만 좋아요 알림 생성
-            if (!post.getAuthor().getId().equals(userId)) {
-                notificationService.notifyLike(post.getAuthor(), postId, post.getTitle());
+            PostLike r = existing.get();
+            if (r.getReactionType() == type) {
+                postLikeRepository.delete(r); // 같은 종류 재클릭 → 취소
+            } else {
+                r.changeType(type); // 다른 종류 → 변경(dirty checking)
             }
-        } catch (DataIntegrityViolationException e) {
-            // 동시 요청 유니크 위반 — 이미 좋아요 상태로 간주
-            long likeCount = postLikeRepository.countByPostId(postId);
-            return new PostLikeResponse(true, likeCount);
+        } else {
+            try {
+                postLikeRepository.save(PostLike.builder().post(post).user(user).reactionType(type).build());
+                // 내 글이 아닐 때만 반응 알림 생성(신규 반응에 한함)
+                if (!post.getAuthor().getId().equals(userId)) {
+                    notificationService.notifyReaction(post.getAuthor(), postId, post.getTitle());
+                }
+            } catch (DataIntegrityViolationException e) {
+                // 동시 첫 반응 경합 — 유니크 제약으로 1회만
+            }
         }
-
-        long likeCount = postLikeRepository.countByPostId(postId);
-        return new PostLikeResponse(true, likeCount);
+        return buildReactions(postId, userId);
     }
 }

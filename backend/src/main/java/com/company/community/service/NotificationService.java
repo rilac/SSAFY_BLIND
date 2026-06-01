@@ -36,10 +36,12 @@ public class NotificationService {
     }
     // [/FEATURE:nested-comments]
 
-    public void notifyLike(User recipient, Long postId, String postTitle) {
+    // [FEATURE:reactions] 반응 알림(좋아요 포함 4종 공통). NotificationType.LIKE 재사용 — enum 마이그레이션 회피.
+    public void notifyReaction(User recipient, Long postId, String postTitle) {
         save(recipient, NotificationType.LIKE,
-                "내 글이 좋아요를 받았어요: \"" + preview(postTitle) + "\"", postId);
+                "내 글에 반응이 달렸어요: \"" + preview(postTitle) + "\"", postId);
     }
+    // [/FEATURE:reactions]
 
     private void save(User recipient, NotificationType type, String message, Long postId) {
         notificationRepository.save(Notification.builder()

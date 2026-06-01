@@ -93,14 +93,16 @@ public class PostController {
     }
 
     /**
-     * POST /api/posts/{id}/like — 좋아요 토글 (#4)
+     * [FEATURE:reactions] POST /api/posts/{id}/reactions — 반응 토글(좋아요/도움돼요/정보/공감).
+     * 같은 종류 재요청=취소, 다른 종류=변경. (기존 /{id}/like 대체)
      */
-    @PostMapping("/{id}/like")
-    public ResponseEntity<PostLikeResponse> toggleLike(
+    @PostMapping("/{id}/reactions")
+    public ResponseEntity<ReactionResponse> react(
             @AuthenticationPrincipal User user,
-            @PathVariable Long id) {
+            @PathVariable Long id,
+            @Valid @RequestBody ReactionRequest request) {
 
-        return ResponseEntity.ok(postService.toggleLike(user.getId(), id));
+        return ResponseEntity.ok(postService.react(user.getId(), id, request.getType()));
     }
 
     /**

@@ -28,11 +28,9 @@ public class PostResponse {
     @JsonProperty("isMine")
     private boolean isMine;
 
-    // (#4) 좋아요 정보
-    @JsonProperty("isLiked")
-    private boolean isLiked;
-
-    private long likeCount;
+    // [FEATURE:reactions] 반응 정보(좋아요/도움돼요/정보/공감 종류별 집계 + 내 반응). 기존 isLiked/likeCount 대체.
+    private ReactionResponse reactions;
+    // [/FEATURE:reactions]
 
     // 스크랩 여부
     @JsonProperty("isBookmarked")
@@ -48,16 +46,17 @@ public class PostResponse {
 
     // ★ 가명(닉네임·기수·지역)만 노출 — mmUserId/email 등 실제 신원은 포함하지 않는다.
     // author는 호출부에서 배치 조회한 작성자 User를 전달받는다. poll은 호출부(PostService)에서 PollService로 계산해 전달(투표 없으면 null).
-    public static PostResponse of(Post post, Long currentUserId, boolean isLiked,
-                                  long likeCount, boolean isBookmarked, User author, PollResponse poll) {
-        return of(post, currentUserId, isLiked, likeCount, isBookmarked, author, post.getViewCount(), poll);
+    // [FEATURE:reactions] isLiked/likeCount 자리에 reactions(ReactionResponse)를 받는다. reactions는 호출부(PostService)에서 계산.
+    public static PostResponse of(Post post, Long currentUserId, ReactionResponse reactions,
+                                  boolean isBookmarked, User author, PollResponse poll) {
+        return of(post, currentUserId, reactions, isBookmarked, author, post.getViewCount(), poll);
     }
 
     // M-NEW-5: 조회수를 명시적으로 전달하는 변형.
     // getPost는 조회수를 벌크 UPDATE(원자적)로 올리므로 관리 엔티티의 viewCount는 갱신 전 값이다.
     // 엔티티를 직접 변경하면 dirty checking으로 2중 증가하므로, 표시값만 +1 하여 여기로 넘긴다.
-    public static PostResponse of(Post post, Long currentUserId, boolean isLiked,
-                                  long likeCount, boolean isBookmarked, User author, int viewCount,
+    public static PostResponse of(Post post, Long currentUserId, ReactionResponse reactions,
+                                  boolean isBookmarked, User author, int viewCount,
                                   PollResponse poll) {
         return new PostResponse(
                 post.getId(),
@@ -69,8 +68,7 @@ public class PostResponse {
                 post.getCreatedAt(),
                 post.getUpdatedAt(),
                 post.getAuthor().getId().equals(currentUserId),
-                isLiked,
-                likeCount,
+                reactions, // [FEATURE:reactions]
                 isBookmarked,
                 post.getAcceptedCommentId(), // [FEATURE:qna-accept]
                 poll // [FEATURE:poll]

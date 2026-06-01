@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ThumbsUp, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2, BarChart3, Check } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll]
+import { ArrowLeft, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2, BarChart3, Check } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll]
 import api from '../api/client';
 import ReportModal from '../components/ReportModal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -10,6 +10,14 @@ const Markdown = lazy(() => import('../components/Markdown'));
 // [/FEATURE:markdown-rendering]
 import { formatTimestamp, formatNumber } from '../lib/format';
 import { categoryLabel } from '../lib/categories';
+
+// [FEATURE:reactions] 반응 종류 메타(이모지+라벨). 키는 서버 ReactionType과 일치.
+const REACTION_META = {
+  LIKE: { emoji: '👍', label: '좋아요' },
+  HELPFUL: { emoji: '🙏', label: '도움돼요' },
+  INFORMATIVE: { emoji: '💡', label: '정보' },
+  EMPATHY: { emoji: '🤝', label: '공감' },
+};
 
 // 게시글 상세 — 가명(닉네임·기수·지역) 노출. 카테고리 배지 + 좋아요/스크랩/신고 + 댓글.
 export default function PostDetailPage() {
@@ -21,7 +29,7 @@ export default function PostDetailPage() {
   const [commentInput, setCommentInput] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [likeLoading, setLikeLoading] = useState(false);
+  const [reactLoading, setReactLoading] = useState(false); // [FEATURE:reactions]
   const [bookmarkLoading, setBookmarkLoading] = useState(false);
   const [commentLoading, setCommentLoading] = useState(false);
   const [reportOpen, setReportOpen] = useState(false);
@@ -57,16 +65,17 @@ export default function PostDetailPage() {
     fetchAll();
   }, [id]);
 
-  const handleLike = async () => {
-    if (likeLoading) return;
-    setLikeLoading(true);
+  // [FEATURE:reactions] 반응 토글 — 같은 종류 재클릭=취소, 다른 종류=변경. 서버가 집계 반환.
+  const handleReact = async (type) => {
+    if (reactLoading) return;
+    setReactLoading(true);
     try {
-      const res = await api.post(`/posts/${id}/like`);
-      setPost((prev) => ({ ...prev, isLiked: res.data.liked, likeCount: res.data.likeCount }));
+      const res = await api.post(`/posts/${id}/reactions`, { type });
+      setPost((prev) => ({ ...prev, reactions: res.data }));
     } catch {
-      setNotice({ title: '좋아요 실패', message: '좋아요 처리에 실패했습니다.' });
+      setNotice({ title: '반응 실패', message: '반응 처리에 실패했습니다.' });
     } finally {
-      setLikeLoading(false);
+      setReactLoading(false);
     }
   };
 
@@ -418,19 +427,29 @@ export default function PostDetailPage() {
           )}
           {/* [/FEATURE:poll] */}
 
-          <div className="flex items-center gap-2 pt-4 border-t border-border">
-            <button
-              onClick={handleLike}
-              disabled={likeLoading}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-mono border transition-colors disabled:opacity-50 ${
-                post.isLiked
-                  ? 'bg-primary text-primary-foreground border-primary'
-                  : 'border-border hover:border-primary'
-              }`}
-            >
-              <ThumbsUp size={14} fill={post.isLiked ? 'currentColor' : 'none'} />
-              {post.likeCount}
-            </button>
+          {/* [FEATURE:reactions] 반응 바(좋아요/도움돼요/정보/공감) — 단일 좋아요 버튼 대체. 같은 종류 재클릭=취소 */}
+          <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-border">
+            {post.reactions?.reactions.map((r) => {
+              const meta = REACTION_META[r.type];
+              if (!meta) return null;
+              const mine = post.reactions.myReaction === r.type;
+              return (
+                <button
+                  key={r.type}
+                  onClick={() => handleReact(r.type)}
+                  disabled={reactLoading}
+                  title={meta.label}
+                  className={`flex items-center gap-1.5 px-3 py-2 text-sm font-mono border transition-colors disabled:opacity-50 ${
+                    mine ? 'bg-primary text-primary-foreground border-primary' : 'border-border hover:border-primary'
+                  }`}
+                >
+                  <span>{meta.emoji}</span>
+                  <span>{meta.label}</span>
+                  {r.count > 0 && <span className="opacity-80">{r.count}</span>}
+                </button>
+              );
+            })}
+            {/* [/FEATURE:reactions] */}
 
             <button
               onClick={handleBookmark}

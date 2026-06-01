@@ -70,8 +70,9 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
             {formatNumber(post.viewCount)}
           </span>
           <span className="flex items-center gap-1.5">
+            {/* [FEATURE:reactions] 총 반응 수(좋아요 포함 4종 합계) */}
             <ThumbsUp size={14} />
-            {post.likeCount}
+            {post.reactionTotal}
           </span>
           <span className="flex items-center gap-1.5">
             <MessageSquare size={14} />

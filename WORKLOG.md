@@ -4,8 +4,8 @@
 분석/계획 문서는 [MoreDevelopments.md](./MoreDevelopments.md)(1차) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md)(2차)이며, 본 문서는 **무엇을 실제로 구현했는지**를 한곳에 모은 진행 현황입니다.
 
 - 최종 업데이트: 2026-06-02
-- Git: **Phase 0~D + Access/Refresh + Flyway + Phase E 7기능 + 후속 UX 버그픽스 커밋·푸시 완료**(`origin/main` — 최신 = 본 버그픽스 커밋). Phase E 커밋: `2805f0f` markdown → `e2e6c17` qna-accept → `0ea272b` op-alias → `72667be` cohort-campus-lounge → `804ce98` docs-sync → `e3c3995` nested-comments(V3) → `2f1ef16` poll(V4) → `45a3567` unread-new(스키마 무변경) → **후속 UX 버그픽스 3종**(라운지 카테고리 stuck·기수/캠퍼스 정리·설정 로그아웃 확인). **미커밋 없음.**
-- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway**) → **Phase E 7기능 완료**(✅ 마크다운 · ✅ Q&A 채택 · ✅ OP/익명 별칭 · ✅ 기수/캠퍼스 라운지 · ✅ 대댓글 · ✅ 익명 투표 · ✅ 읽음/새 글 배지) + **후속 UX 버그픽스 3종** → **남은 것: §6 백로그(모더레이션 강화·리액션 등) + 테스트 폭**
+- Git: **Phase 0~D + Access/Refresh + Flyway + Phase E 7기능 + 후속 UX 버그픽스 커밋·푸시 완료**(`origin/main` — 최신 `d88fd47`). Phase E 커밋: `2805f0f` markdown → `e2e6c17` qna-accept → `0ea272b` op-alias → `72667be` cohort-campus-lounge → `804ce98` docs-sync → `e3c3995` nested-comments(V3) → `2f1ef16` poll(V4) → `45a3567` unread-new → `d88fd47` UX 버그픽스 3종. **다양한 반응(reactions)은 구현 완료·미커밋**(Flyway V5, 단일 좋아요→4종 반응).
+- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway**) → **Phase E 8기능**(✅ 마크다운 · ✅ Q&A 채택 · ✅ OP/익명 별칭 · ✅ 기수/캠퍼스 라운지 · ✅ 대댓글 · ✅ 익명 투표 · ✅ 읽음/새 글 배지 · ✅ 다양한 반응(미커밋)) + 후속 UX 버그픽스 3종 → **남은 것: §6 백로그(모더레이션 강화·북마크 폴더 등) + 테스트 폭**
 - ✅ **Access/Refresh 토큰 분리 구현 완료(2026-06-02)**: 짧은 Access(30m, stateless) + DB 저장 Refresh(14d, `refresh_tokens`) + `/api/auth/refresh` 회전 재발급 + 만료 정리 스케줄러. 검증: backend `./gradlew.bat test` BUILD SUCCESSFUL, frontend `npm run build` 성공. *(아래 "✅ Refresh Token 도입" 섹션)*
 - ✅ **M-NEW-7 Flyway 도입 완료(2026-06-02)**: Hibernate가 생성한 `V1__baseline.sql`(=validate와 정확히 일치) + `baseline-on-migrate`로 기존/신규 DB 모두 안전 처리. dev/prod 모두 Flyway ON·`ddl-auto: validate`, 테스트(H2)는 Flyway OFF. **배포 전 수동 DDL 폐기.** *(아래 "✅ M-NEW-7 Flyway" 섹션)*
 - 운영 완성도 추이: 1차 65~70% → Phase 0 후 70~75% → Phase A·B 후 배포 가능 → Phase C 후 UX/정책 마감 → Phase D(운영품질)+Access/Refresh+Flyway 완료(약 92%) → **Phase E(기능 확장) 진행 중**
@@ -17,9 +17,9 @@
 
 > 재개용 체크리스트. 상세는 각 섹션 참조. 현재 모든 작업트리 변경은 **검증 완료(테스트/빌드 통과)** 상태.
 
-1. ✅ **Phase E 7기능 전부 커밋·푸시 완료**(`origin/main` — unread-new `45a3567`까지). 미커밋 없음.
-2. **다음 기능 (문서 권장 순)** — Phase E A/B ★ 우선순위 소진(스터디 모집은 익명 보드 특성상 제외). 남은 §6 백로그 중 택1: **리액션 확장**(도움돼요/정보/공감, §6-3/C) 또는 **모더레이션 강화**(소프트삭제+휴지통·감사 로그·강제 숨김, §6 운영품질) 또는 **북마크 폴더/주간 다이제스트**(§6-4/C) 등. 착수 시 롤백 마커 + `FEATURES.md` 인덱싱.
-3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1~V4 자동 적용**(`flyway_schema_history`; `accepted_comment_id`·`parent_id`·`poll_options`/`poll_votes`). op-alias·라운지는 스키마 무변경. 채택/마크다운/별칭/라운지/대댓글/투표 E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료). ⚠️ V4는 수기 DDL이라 실 MySQL `validate` 최종 확인 권장.
+1. **미커밋 정리 (먼저)** — **다양한 반응(reactions)** 구현 완료·미커밋. 커밋 권장: `feat: 다양한 반응 — 좋아요/도움돼요/정보/공감 (Phase E)` — `FEATURES.md` reactions 범위 (+ Flyway `V5`). (UX 버그픽스까지 `d88fd47`로 푸시됨.)
+2. **다음 기능 (문서 권장 순)** — 남은 §6 백로그 중 택1: **모더레이션 강화**(소프트삭제+휴지통·감사 로그·강제 숨김, §6 운영품질) 또는 **북마크 폴더/메모**(§6-4) 또는 **주간 다이제스트(MM DM)**(§6-3) 등. 착수 시 롤백 마커 + `FEATURES.md` 인덱싱.
+3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1~V5 자동 적용**(`flyway_schema_history`; `accepted_comment_id`·`parent_id`·`poll_*`·`post_likes.reaction_type`). op-alias·라운지·unread-new는 스키마 무변경. E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료). ⚠️ V4·V5는 수기 DDL이라 실 MySQL `validate` 최종 확인 권장(V5는 클론 테이블로 DDL 검증 완료).
 4. **테스트 폭(여력 시)** — 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (CommentService 단위[채택·별칭·대댓글]·PostService 단위[scope]·PollService 단위·삭제 통합·라운지 @DataJpaTest·헬스/인가 스모크·RefreshTokenService는 완료)
 
 ---
@@ -252,6 +252,20 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 **롤백**: `FEATURES.md`의 `unread-new` 절차(스키마/신규 파일 없음).
 **후속 후보**: 피드 노출만으로 읽음 처리, 마지막 방문 기준 "새 글 N개" 요약, 상세 페이지 읽음 표시.
 
+### reactions — 다양한 반응(좋아요/도움돼요/정보/공감) (2026-06-02, 미커밋)
+§6-5 C. 단일 좋아요 → 4종 반응(1인 1반응·단일 선택). **기존 post_likes 재사용**(+reaction_type), **Flyway V5**. 검증: backend `./gradlew.bat test` **BUILD SUCCESSFUL**(`PostServiceTest` react 3종 + 기존 getPost/getAllPosts 스텁 갱신), frontend `npm run build` 성공(메인 278KB), V5 DDL 클론 테이블 검증.
+
+| 항목 | 핵심 | 파일 |
+|---|---|---|
+| 데이터 | `post_likes.reaction_type` enum(4종, 기존 행=LIKE) + (post_id,user_id) 유니크 유지=1인 1반응. **Flyway V5** | `domain/PostLike`(+`ReactionType`), `db/migration/V5__add_reaction_type.sql` |
+| API/토글 | `POST …/reactions {type}` — 같은 종류=취소·다른 종류=변경·신규=+알림. 기존 `/like` 대체 | `controller/PostController`, `service/PostService.react`, `NotificationService.notifyReaction` |
+| 응답 | 상세 `PostResponse.reactions`(종류별 집계+myReaction), 피드 `PostListResponse.reactionTotal`+`myReaction`. isLiked/likeCount 제거 | `dto/ReactionResponse`·`ReactionRequest`(신규), `PostResponse`·`PostListResponse` |
+| UI | 상세 반응 바(이모지+라벨+수·토글), 피드 총 반응 수 | `pages/PostDetailPage.jsx`, `components/PostCard.jsx` |
+| 테스트 | react 신규/취소/변경 3종 | `test/service/PostServiceTest`(react 블록) |
+
+**롤백**: `FEATURES.md`의 `reactions` 절차(단일 좋아요로 환원 — 비교적 큰 revert, V5 컬럼 drop 포함).
+**후속 후보**: 멀티 선택, 댓글 반응, 반응 종류별 알림.
+
 ### Phase E 후속 — 사용자 보고 UX 버그픽스 3종 (2026-06-02)
 사용자 사용 중 보고된 불편 3건. **프론트 전용·영구 수정**(롤백 마커 없음). 검증: `npm run build` 성공.
 
@@ -289,7 +303,8 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 - ✅ **대댓글(1-depth 답글)**(완료·커밋 `e3c3995` — `FEATURES.md` nested-comments, Flyway V3).
 - ✅ **익명 투표/설문**(완료·커밋 `2f1ef16` — `FEATURES.md` poll, Flyway V4).
 - ✅ **읽음 표시/안 읽은 새 글 배지**(완료·커밋 `45a3567` — `FEATURES.md` unread-new, 스키마 무변경·PostView 재사용).
-- 남음(§6 백로그): 리액션 확장(도움돼요/정보/공감), 모더레이션 강화(소프트삭제+휴지통·감사 로그·강제 숨김), 북마크 폴더/메모, 주간 다이제스트, 알림 확장/실시간, MM DM 연동 등. (스터디/팀원 모집은 익명 보드 특성상 제외.) 상세는 V2 §6.
+- ✅ **다양한 반응(좋아요/도움돼요/정보/공감)**(완료·미커밋 — `FEATURES.md` reactions, Flyway V5).
+- 남음(§6 백로그): 모더레이션 강화(소프트삭제+휴지통·감사 로그·강제 숨김), 북마크 폴더/메모, 주간 다이제스트, 알림 확장/실시간, MM DM 연동 등. (스터디/팀원 모집은 익명 보드 특성상 제외.) 상세는 V2 §6.
 
 ---
 
@@ -320,7 +335,7 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 5. **계정 휴면/탈퇴 시** 해당 계정의 기존 토큰은 즉시 거부됨(H-NEW-2, 의도된 동작). **추가로 휴면/탈퇴 시 해당 유저의 Refresh Token 전체를 DB에서 삭제**하므로 재발급도 불가(완전 무효화).
 6. **헬스체크(Phase D)**: `GET /actuator/health`는 **인증 없이 공개**(LB/오케스트레이터 프로브용). 상세 컴포넌트는 인증 시에만 노출. `liveness`/`readiness` 프로브는 `/actuator/health/{liveness,readiness}`.
 7. ✅ **스키마 마이그레이션은 Flyway가 자동 처리(M-NEW-7)** — 더 이상 배포 전 수동 DDL 불필요. dev/prod 기동 시 `classpath:db/migration`의 `V*__*.sql`을 적용하고 `ddl-auto: validate`로 재검증한다. 마이그레이션 추가는 `backend/src/main/resources/db/migration/V{N}__...sql`. (기존 수동 스크립트는 `V1__baseline.sql`에 흡수·삭제 — `backend/db/README.md` 참고.)
-   - 현 스키마: `posts.reviewed`, `post_views`, `refresh_tokens`는 V1 베이스라인 / `posts.accepted_comment_id`는 **V2** / `comments.parent_id`(+index)는 **V3** / `poll_options`·`poll_votes`는 **V4**(수기 DDL — 엔티티와 컬럼/타입 일치, 실 MySQL `validate` 최종 확인 권장).
+   - 현 스키마: `posts.reviewed`, `post_views`, `refresh_tokens`는 V1 베이스라인 / `posts.accepted_comment_id`는 **V2** / `comments.parent_id`(+index)는 **V3** / `poll_options`·`poll_votes`는 **V4** / `post_likes.reaction_type`(enum)는 **V5**. (V4·V5는 수기 DDL — 엔티티와 컬럼/타입 일치, 실 MySQL `validate` 최종 확인 권장.)
    - 조회수 동작: 작성자 본인 조회 미집계 + 동일 유저 24h 1회 집계.
    - ⚠️ 기존 prod가 V1보다 뒤처졌다면(누락 테이블 존재) baseline 전 1회 전환 작업 필요 — `backend/db/README.md` 「기존 prod 전환」.
 8. **토큰 수명 변경**: Access Token이 **24h → 30m**로 단축됨. 프론트는 401 시 `/api/auth/refresh`로 자동 재발급(`api/client.js`)하므로 사용자 체감 영향 없음. `refresh_tokens` 테이블은 Flyway V1이 생성하므로 별도 수동 작업 불필요(7번).

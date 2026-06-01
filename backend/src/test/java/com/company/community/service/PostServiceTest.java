@@ -17,6 +17,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -143,8 +144,6 @@ class PostServiceTest {
     void test_작성자_본인조회_조회수_미증가() {
         // Arrange — author(ID=1)가 본인 글(author=1) 조회
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
-        given(postLikeRepository.existsByPostIdAndUserId(10L, 1L)).willReturn(false);
-        given(postLikeRepository.countByPostId(10L)).willReturn(0L);
 
         // Act
         PostResponse response = postService.getPost(10L, 1L, UserRole.USER);
@@ -162,8 +161,6 @@ class PostServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(postViewRepository.findByPostIdAndUserId(10L, 2L)).willReturn(Optional.empty());
         given(userRepository.findById(2L)).willReturn(Optional.of(otherUser));
-        given(postLikeRepository.existsByPostIdAndUserId(10L, 2L)).willReturn(false);
-        given(postLikeRepository.countByPostId(10L)).willReturn(0L);
 
         // Act
         postService.getPost(10L, 2L, UserRole.USER);
@@ -181,8 +178,6 @@ class PostServiceTest {
                 .viewedAt(LocalDateTime.now().minusHours(1)).build();
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(postViewRepository.findByPostIdAndUserId(10L, 2L)).willReturn(Optional.of(recent));
-        given(postLikeRepository.existsByPostIdAndUserId(10L, 2L)).willReturn(false);
-        given(postLikeRepository.countByPostId(10L)).willReturn(0L);
 
         // Act
         postService.getPost(10L, 2L, UserRole.USER);
@@ -308,7 +303,7 @@ class PostServiceTest {
                 .willReturn(new PageImpl<>(List.of(recentUnread, recentRead, mine, oldUnread)));
         given(commentRepository.countByPostIds(any())).willReturn(List.of());
         given(postLikeRepository.countByPostIds(any())).willReturn(List.of());
-        given(postLikeRepository.findLikedPostIds(any(), anyLong())).willReturn(List.of());
+        given(postLikeRepository.findUserReactions(any(), anyLong())).willReturn(List.of()); // [FEATURE:reactions]
         given(bookmarkRepository.findBookmarkedPostIds(any(), anyLong())).willReturn(List.of());
         given(pollService.hasPollPostIds(any())).willReturn(Set.of());
         given(postViewRepository.findViewedPostIds(any(), anyLong())).willReturn(List.of(12L)); // recentRead만 열람
@@ -333,6 +328,52 @@ class PostServiceTest {
         return p;
     }
     // [/FEATURE:unread-new]
+
+    // [FEATURE:reactions] 반응 토글 — 신규(저장+알림)/같은 종류(취소)/다른 종류(변경)
+    @Test
+    @DisplayName("react: 처음 누르면 해당 종류로 저장 + 글 작성자에게 알림")
+    void test_반응_신규() {
+        given(userRepository.findById(2L)).willReturn(Optional.of(otherUser));
+        given(postRepository.findById(10L)).willReturn(Optional.of(post));
+        given(postLikeRepository.findByPostIdAndUserId(10L, 2L)).willReturn(Optional.empty());
+
+        postService.react(2L, 10L, ReactionType.HELPFUL);
+
+        ArgumentCaptor<PostLike> cap = ArgumentCaptor.forClass(PostLike.class);
+        verify(postLikeRepository).save(cap.capture());
+        assertThat(cap.getValue().getReactionType()).isEqualTo(ReactionType.HELPFUL);
+        verify(notificationService).notifyReaction(any(), anyLong(), any());
+    }
+
+    @Test
+    @DisplayName("react: 같은 종류를 다시 누르면 취소(delete)")
+    void test_반응_취소() {
+        PostLike existing = PostLike.builder().post(post).user(otherUser).reactionType(ReactionType.LIKE).build();
+        given(userRepository.findById(2L)).willReturn(Optional.of(otherUser));
+        given(postRepository.findById(10L)).willReturn(Optional.of(post));
+        given(postLikeRepository.findByPostIdAndUserId(10L, 2L)).willReturn(Optional.of(existing));
+
+        postService.react(2L, 10L, ReactionType.LIKE);
+
+        verify(postLikeRepository).delete(existing);
+        verify(postLikeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("react: 다른 종류를 누르면 변경(changeType, delete/save 없음)")
+    void test_반응_변경() {
+        PostLike existing = PostLike.builder().post(post).user(otherUser).reactionType(ReactionType.LIKE).build();
+        given(userRepository.findById(2L)).willReturn(Optional.of(otherUser));
+        given(postRepository.findById(10L)).willReturn(Optional.of(post));
+        given(postLikeRepository.findByPostIdAndUserId(10L, 2L)).willReturn(Optional.of(existing));
+
+        postService.react(2L, 10L, ReactionType.INFORMATIVE);
+
+        assertThat(existing.getReactionType()).isEqualTo(ReactionType.INFORMATIVE);
+        verify(postLikeRepository, never()).delete(any());
+        verify(postLikeRepository, never()).save(any());
+    }
+    // [/FEATURE:reactions]
 
     // 리플렉션으로 DTO 필드 설정
     private void setField(Object obj, String fieldName, Object value) {

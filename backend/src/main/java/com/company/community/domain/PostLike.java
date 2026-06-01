@@ -27,6 +27,14 @@ public class PostLike {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    // [FEATURE:reactions] 반응 종류(좋아요/도움돼요/정보/공감). (post_id,user_id) 유니크라 1인 1반응.
+    // 기존 좋아요 행은 V5 마이그레이션에서 LIKE로 채워진다.
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    @Builder.Default
+    private ReactionType reactionType = ReactionType.LIKE;
+    // [/FEATURE:reactions]
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
@@ -34,4 +42,10 @@ public class PostLike {
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
     }
+
+    // [FEATURE:reactions] 다른 반응으로 변경 — @Setter 금지, 도메인 메서드로만.
+    public void changeType(ReactionType reactionType) {
+        this.reactionType = reactionType;
+    }
+    // [/FEATURE:reactions]
 }

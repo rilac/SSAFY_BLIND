@@ -26,11 +26,10 @@ public class PostListResponse {
     @JsonProperty("isMine")
     private boolean isMine;
 
-    // (#4) 좋아요 정보
-    @JsonProperty("isLiked")
-    private boolean isLiked;
-
-    private long likeCount;
+    // [FEATURE:reactions] 피드용 경량 반응 정보 — 총 반응 수 + 내가 누른 반응 종류(없으면 null). 기존 isLiked/likeCount 대체.
+    private long reactionTotal;
+    private String myReaction;
+    // [/FEATURE:reactions]
 
     // 스크랩 여부
     @JsonProperty("isBookmarked")
@@ -55,7 +54,7 @@ public class PostListResponse {
 
     // ★ 가명(닉네임·기수·지역)만 노출. author는 호출부에서 배치 조회한 작성자 User.
     public static PostListResponse of(Post post, long commentCount, Long currentUserId,
-                                      boolean isLiked, long likeCount, boolean isBookmarked, User author,
+                                      long reactionTotal, String myReaction, boolean isBookmarked, User author,
                                       boolean hasPoll, boolean isNew, boolean isRead) {
         return new PostListResponse(
                 post.getId(),
@@ -66,8 +65,8 @@ public class PostListResponse {
                 (int) commentCount,
                 post.getCreatedAt(),
                 post.getAuthor().getId().equals(currentUserId),
-                isLiked,
-                likeCount,
+                reactionTotal, // [FEATURE:reactions]
+                myReaction,    // [FEATURE:reactions]
                 isBookmarked,
                 post.getAcceptedCommentId() != null, // [FEATURE:qna-accept] solved
                 hasPoll, // [FEATURE:poll]

@@ -217,3 +217,33 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 2. 신규 파일 없음. DB/마이그레이션 변경 없음.
 
 **미적용(후속 후보)**: 피드 노출만으로 읽음 처리(IntersectionObserver), 마지막 방문 기준 "새 글 N개" 요약, window 사용자 설정, 상세 페이지 읽음 표시.
+
+---
+
+## reactions — 다양한 반응(좋아요/도움돼요/정보/공감) (2026-06-02)
+
+§6-5 C / §6-3. 단일 "좋아요"를 **4종 반응**(좋아요·도움돼요·정보·공감)으로 확장. **1인 1반응(단일 선택)** — 페이스북식. **기존 `post_likes` 재사용**(+`reaction_type` enum), Flyway **V5**. **백엔드 + 프론트.**
+
+**범위/동작**
+- 데이터: `post_likes`에 `reaction_type enum('LIKE','HELPFUL','INFORMATIVE','EMPATHY') NOT NULL` 추가(**Flyway V5**, 기존 좋아요 행은 DEFAULT `LIKE`로 채움). `(post_id,user_id)` 유니크 유지 → **1인 1반응**. `PostLike` 엔티티에 `reactionType`(@Builder.Default LIKE) + `changeType` 도메인 메서드.
+- 토글: `POST /api/posts/{postId}/reactions` `{type}` — **같은 종류 재클릭=취소(delete), 다른 종류=변경(changeType), 처음=신규(+작성자 알림)**. (기존 `POST /{id}/like` 대체.) 동시 첫 반응은 유니크로 1회.
+- 응답: 상세 `PostResponse.reactions`(`ReactionResponse`: 종류별 수[4종 0 포함] + total + myReaction[없으면 null]). 피드 `PostListResponse.reactionTotal`(총합) + `myReaction`. **기존 `isLiked`/`likeCount` 제거**(PostResponse/PostListResponse).
+- 집계: 상세=`countByPostIdGroupByType`+`findByPostIdAndUserId`(buildReactions), 피드=`countByPostIds`(총합)+`findUserReactions`(배치, N+1 방지).
+- 알림: 신규 반응 시 작성자에게 `notifyReaction`(`NotificationType.LIKE` 재사용으로 enum 마이그레이션 회피, 메시지 "내 글에 반응이 달렸어요").
+- UI: 상세 `PostDetailPage` 반응 바(이모지+라벨+수, 내 반응 강조·토글), 피드 `PostCard` 총 반응 수.
+
+**알려진 동작/한계**: ① 1인 1반응(멀티 선택 아님 — 사용자 결정). ② 댓글 반응 미지원(게시글만). ③ 알림 type은 LIKE 재사용(반응 종류 구분 안 됨). ④ V5는 수기 DDL(enum) — 엔티티와 일치 확인했고 클론 테이블로 DDL 검증, **실 MySQL `validate`는 첫 기동 시 확인 권장**.
+
+**마커 위치 (`[FEATURE:reactions]`)**
+- (신규) 백엔드: `domain/ReactionType.java`, `dto/ReactionResponse.java`·`ReactionRequest.java`, `resources/db/migration/V5__add_reaction_type.sql`. 테스트: `PostServiceTest`의 react 3종(마커 블록).
+- 백엔드(수정): `domain/PostLike.java`(reactionType+changeType), `repository/PostLikeRepository.java`(countByPostIdGroupByType·findUserReactions 추가, like 전용 메서드 정리), `service/PostService.java`(react·buildReactions, getPost/getAllPosts/createPost/updatePost), `controller/PostController.java`(/reactions), `service/NotificationService.java`(notifyReaction), `dto/PostResponse.java`·`PostListResponse.java`(isLiked/likeCount→reactions). 삭제: `dto/PostLikeResponse.java`.
+- 프론트: `pages/PostDetailPage.jsx`(REACTION_META·handleReact·반응 바, ThumbsUp import 제거), `components/PostCard.jsx`(likeCount→reactionTotal).
+
+**롤백 절차** (단일 좋아요로 환원 — 비교적 큰 revert)
+1. `[FEATURE:reactions]` 마커 블록 제거 + 신규 파일 삭제(ReactionType/ReactionResponse/ReactionRequest/V5/`PostServiceTest` react 블록).
+2. `PostLike`에서 reactionType/changeType 제거. `PostLikeRepository`에 `existsByPostIdAndUserId`·`countByPostId`·`findLikedPostIds` 복원, 신규 쿼리 제거.
+3. `PostService.react`→`toggleLike`(PostLikeResponse 반환) 복원, getPost/getAllPosts/createPost/updatePost를 isLiked/likeCount로 환원. `PostResponse`/`PostListResponse`에 isLiked/likeCount 복원. `PostLikeResponse.java` 복구. `PostController` `/like` 복원. `NotificationService.notifyReaction`→`notifyLike`.
+4. 프론트 PostDetailPage 단일 좋아요 버튼·handleLike 복원(ThumbsUp import), PostCard reactionTotal→likeCount.
+5. DB: `alter table post_likes drop column reaction_type;` (V5 적용 환경).
+
+**미적용(후속 후보)**: 멀티 선택 반응, 댓글 반응, 반응 종류별 알림(REPLY처럼 type 분리), 반응한 사람 목록(익명 유지 전제).

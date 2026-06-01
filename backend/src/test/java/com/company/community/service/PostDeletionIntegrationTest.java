@@ -109,7 +109,7 @@ class PostDeletionIntegrationTest {
 
         // 글과 자식들이 모두 정리됐는지 확인
         assertThat(postRepository.findById(postId)).isEmpty();
-        assertThat(postLikeRepository.existsByPostIdAndUserId(postId, other.getId())).isFalse();
+        assertThat(postLikeRepository.findByPostIdAndUserId(postId, other.getId())).isEmpty();
         assertThat(bookmarkRepository.existsByPostIdAndUserId(postId, other.getId())).isFalse();
         assertThat(reportRepository.countByPostId(postId)).isZero();
         assertThat(postViewRepository.findByPostIdAndUserId(postId, other.getId())).isEmpty();
