@@ -166,6 +166,27 @@ export default function PostDetailPage() {
   };
   // [/FEATURE:qna-accept]
 
+  // [FEATURE:nested-comments] 답글 입력 상태 + 작성 핸들러 (replyingTo = 답글 대상 부모 댓글 id)
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyInput, setReplyInput] = useState('');
+  const [replyLoading, setReplyLoading] = useState(false);
+  const handleReplySubmit = async (parentId) => {
+    const trimmed = replyInput.trim();
+    if (!trimmed || replyLoading) return;
+    setReplyLoading(true);
+    try {
+      const res = await api.post(`/posts/${id}/comments`, { content: trimmed, parentId });
+      setComments((prev) => [...prev, res.data]);
+      setReplyInput('');
+      setReplyingTo(null);
+    } catch (e) {
+      setNotice({ title: '답글 작성 실패', message: e.response?.data?.message || '답글 작성에 실패했습니다.' });
+    } finally {
+      setReplyLoading(false);
+    }
+  };
+  // [/FEATURE:nested-comments]
+
   const backBtn = (
     <button
       onClick={() => navigate('/feed')}
@@ -198,6 +219,85 @@ export default function PostDetailPage() {
   }
 
   const isEdited = post.createdAt !== post.updatedAt;
+
+  // [FEATURE:nested-comments] 평면 댓글 목록(서버, createdAt asc)을 최상위/답글(1-depth)로 그룹핑
+  const topLevelComments = comments.filter((c) => !c.parentId);
+  const repliesByParent = comments.reduce((acc, c) => {
+    if (c.parentId) (acc[c.parentId] = acc[c.parentId] || []).push(c);
+    return acc;
+  }, {});
+
+  // 댓글 1건 렌더 — 최상위/답글 공용. 답글(isReply)은 들여쓰기, 채택·답글 버튼 없음.
+  const renderComment = (comment, isReply) => {
+    const accepted = !isReply && post.acceptedCommentId === comment.id; // [FEATURE:qna-accept] 답글은 채택 대상 아님
+    const canAccept = !isReply && post.isMine && post.category === 'QUESTION'; // [FEATURE:qna-accept]
+    return (
+      <div
+        key={comment.id}
+        className={
+          isReply
+            ? 'mt-3 ml-6 pl-3 border-l border-border'
+            : accepted
+              ? 'border-l-2 border-l-green-500 pl-3'
+              : ''
+        }
+      >
+        {/* [FEATURE:qna-accept] 채택된 답변 라벨 */}
+        {accepted && (
+          <div className="flex items-center gap-1 text-xs font-mono text-green-600 dark:text-green-400 mb-1">
+            <CheckCircle2 size={12} /> 채택된 답변
+          </div>
+        )}
+        {/* [/FEATURE:qna-accept] */}
+        <div className="flex items-start justify-between gap-2">
+          <p className="text-sm flex-1">{comment.content}</p>
+          <div className="flex items-center gap-2 shrink-0">
+            {/* [FEATURE:qna-accept] 질문 작성자만 채택 토글(최상위 답변 한정) */}
+            {canAccept && (
+              <button
+                onClick={() => handleAcceptToggle(comment.id)}
+                disabled={acceptLoading === comment.id}
+                className={`flex items-center gap-1 text-xs font-mono transition-colors disabled:opacity-50 ${
+                  accepted ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <CheckCircle2 size={12} fill={accepted ? 'currentColor' : 'none'} />
+                {accepted ? '채택 해제' : '채택'}
+              </button>
+            )}
+            {/* [/FEATURE:qna-accept] */}
+            {!isReply && (
+              <button
+                onClick={() => {
+                  setReplyingTo(replyingTo === comment.id ? null : comment.id);
+                  setReplyInput('');
+                }}
+                className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
+              >
+                답글
+              </button>
+            )}
+            {comment.isMine && (
+              <button
+                onClick={() => handleDeleteComment(comment.id)}
+                className="text-xs font-mono text-destructive hover:opacity-80 transition-opacity"
+              >
+                삭제
+              </button>
+            )}
+          </div>
+        </div>
+        <span className="text-[10px] font-mono text-muted-foreground mt-1 block">
+          {/* [FEATURE:op-alias] 닉네임 대신 글 단위 별칭(글쓴이/익명N). 글쓴이(OP)는 강조. */}
+          <span className={comment.isAuthor ? 'text-primary font-semibold' : undefined}>{comment.alias}</span>
+          {/* [/FEATURE:op-alias] */}
+          {' · '}{comment.author?.cohort} {comment.author?.campus} ·{' '}
+          {formatTimestamp(comment.createdAt)}
+        </span>
+      </div>
+    );
+  };
+  // [/FEATURE:nested-comments]
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground overflow-y-auto">
@@ -305,66 +405,39 @@ export default function PostDetailPage() {
             <p className="text-xs font-mono text-muted-foreground mb-4">아직 댓글이 없습니다.</p>
           ) : (
             <div className="space-y-3 mb-4">
-              {comments.map((comment) => {
-                // [FEATURE:qna-accept] 채택 상태/권한 (서버가 권한 재검증 — 버튼은 UX용 조건부 노출)
-                const accepted = post.acceptedCommentId === comment.id;
-                const canAccept = post.isMine && post.category === 'QUESTION';
-                // [/FEATURE:qna-accept]
-                return (
-                  <div
-                    key={comment.id}
-                    className={`border-b border-border pb-3 last:border-b-0 last:pb-0${
-                      accepted ? ' border-l-2 border-l-green-500 pl-3' : '' // [FEATURE:qna-accept]
-                    }`}
-                  >
-                    {/* [FEATURE:qna-accept] 채택된 답변 라벨 */}
-                    {accepted && (
-                      <div className="flex items-center gap-1 text-xs font-mono text-green-600 dark:text-green-400 mb-1">
-                        <CheckCircle2 size={12} /> 채택된 답변
-                      </div>
-                    )}
-                    {/* [/FEATURE:qna-accept] */}
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-sm flex-1">{comment.content}</p>
-                      <div className="flex items-center gap-2 shrink-0">
-                        {/* [FEATURE:qna-accept] 질문 작성자만 채택 토글 버튼 */}
-                        {canAccept && (
-                          <button
-                            onClick={() => handleAcceptToggle(comment.id)}
-                            disabled={acceptLoading === comment.id}
-                            className={`flex items-center gap-1 text-xs font-mono transition-colors disabled:opacity-50 ${
-                              accepted
-                                ? 'text-green-600 dark:text-green-400'
-                                : 'text-muted-foreground hover:text-foreground'
-                            }`}
-                          >
-                            <CheckCircle2 size={12} fill={accepted ? 'currentColor' : 'none'} />
-                            {accepted ? '채택 해제' : '채택'}
-                          </button>
-                        )}
-                        {/* [/FEATURE:qna-accept] */}
-                        {comment.isMine && (
-                          <button
-                            onClick={() => handleDeleteComment(comment.id)}
-                            className="text-xs font-mono text-destructive hover:opacity-80 transition-opacity"
-                          >
-                            삭제
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    <span className="text-[10px] font-mono text-muted-foreground mt-1 block">
-                      {/* [FEATURE:op-alias] 닉네임 대신 글 단위 별칭(글쓴이/익명N). 글쓴이(OP)는 강조. */}
-                      <span className={comment.isAuthor ? 'text-primary font-semibold' : undefined}>
-                        {comment.alias}
-                      </span>
-                      {/* [/FEATURE:op-alias] */}
-                      {' · '}{comment.author?.cohort} {comment.author?.campus} ·{' '}
-                      {formatTimestamp(comment.createdAt)}
-                    </span>
-                  </div>
-                );
-              })}
+              {/* [FEATURE:nested-comments] 최상위 댓글 + 답글(들여쓰기) + 답글 입력 (평면 map → 그룹핑 렌더로 대체) */}
+              {topLevelComments.map((comment) => (
+                <div key={comment.id} className="border-b border-border pb-3 last:border-b-0 last:pb-0">
+                  {renderComment(comment, false)}
+                  {(repliesByParent[comment.id] || []).map((reply) => renderComment(reply, true))}
+                  {replyingTo === comment.id && (
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        handleReplySubmit(comment.id);
+                      }}
+                      className="flex gap-2 mt-3 ml-6"
+                    >
+                      <input
+                        type="text"
+                        value={replyInput}
+                        onChange={(e) => setReplyInput(e.target.value)}
+                        placeholder="답글을 입력하세요"
+                        autoFocus
+                        className="flex-1 h-9 px-3 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+                      />
+                      <button
+                        type="submit"
+                        disabled={replyLoading || !replyInput.trim()}
+                        className="px-4 h-9 bg-primary text-primary-foreground font-mono text-xs hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {replyLoading ? '...' : '답글'}
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ))}
+              {/* [/FEATURE:nested-comments] */}
             </div>
           )}
 

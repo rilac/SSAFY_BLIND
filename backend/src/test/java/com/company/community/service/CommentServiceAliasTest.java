@@ -92,6 +92,7 @@ class CommentServiceAliasTest {
         Comment saved = comment(200L, post, op);
         CommentCreateRequest req = mock(CommentCreateRequest.class);
         given(req.getContent()).willReturn("내용");
+        given(req.getParentId()).willReturn(null); // 최상위 댓글(답글 아님) — Mockito Long 기본값 0L 회피
         given(userRepository.findById(1L)).willReturn(Optional.of(op));
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(commentRepository.save(any(Comment.class))).willReturn(saved);
@@ -114,6 +115,7 @@ class CommentServiceAliasTest {
         Comment saved = comment(200L, post, u2);
         CommentCreateRequest req = mock(CommentCreateRequest.class);
         given(req.getContent()).willReturn("내용");
+        given(req.getParentId()).willReturn(null); // 최상위 댓글(답글 아님) — Mockito Long 기본값 0L 회피
         given(userRepository.findById(2L)).willReturn(Optional.of(u2));
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(commentRepository.save(any(Comment.class))).willReturn(saved);

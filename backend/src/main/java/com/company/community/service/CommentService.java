@@ -45,14 +45,35 @@ public class CommentService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
 
+        // [FEATURE:nested-comments] 답글이면 부모 검증: 존재·동일 글·1-depth(부모가 최상위여야 함).
+        Comment parent = null;
+        if (request.getParentId() != null) {
+            parent = commentRepository.findById(request.getParentId())
+                    .orElseThrow(() -> new NoSuchElementException("존재하지 않는 댓글입니다."));
+            if (!parent.getPost().getId().equals(postId)) {
+                throw new NoSuchElementException("해당 게시글의 댓글이 아닙니다.");
+            }
+            if (parent.getParentId() != null) {
+                throw new InvalidStateException("답글에는 다시 답글을 달 수 없습니다.");
+            }
+        }
+        // [/FEATURE:nested-comments]
+
         Comment comment = Comment.builder()
                 .content(request.getContent())
                 .post(post)
                 .author(author)
+                .parentId(request.getParentId()) // [FEATURE:nested-comments]
                 .build();
 
         Comment saved = commentRepository.save(comment);
 
+        // [FEATURE:nested-comments] 답글이면 부모 댓글 작성자에게 알림, 아니면 글 작성자에게(본인 제외)
+        if (parent != null) {
+            if (!parent.getAuthor().getId().equals(userId)) {
+                notificationService.notifyReply(parent.getAuthor(), postId);
+            }
+        } else // [/FEATURE:nested-comments]
         // 내 글이 아닐 때만 댓글 알림 생성
         if (!post.getAuthor().getId().equals(userId)) {
             notificationService.notifyComment(post.getAuthor(), postId, post.getTitle());
@@ -147,6 +168,10 @@ public class CommentService {
         }
         // [/FEATURE:qna-accept]
 
+        // [FEATURE:nested-comments] 최상위 댓글 삭제 시 그 답글도 함께 정리(1-depth). 답글이면 자식이 없어 no-op.
+        commentRepository.deleteByParentId(commentId);
+        // [/FEATURE:nested-comments]
+
         commentRepository.delete(comment);
     }
 
@@ -168,6 +193,11 @@ public class CommentService {
         if (!comment.getPost().getId().equals(postId)) {
             throw new NoSuchElementException("해당 게시글의 댓글이 아닙니다.");
         }
+        // [FEATURE:nested-comments] 답글(대댓글)은 채택 대상이 아님 — 최상위 답변만 채택 가능.
+        if (comment.getParentId() != null) {
+            throw new InvalidStateException("답글은 채택할 수 없습니다.");
+        }
+        // [/FEATURE:nested-comments]
 
         // 토글: 이미 채택된 답변이면 해제, 아니면 채택(교체)
         if (commentId.equals(post.getAcceptedCommentId())) {

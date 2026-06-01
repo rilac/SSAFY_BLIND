@@ -29,6 +29,13 @@ public class NotificationService {
                 "내 글에 새 댓글이 달렸어요: \"" + preview(postTitle) + "\"", postId);
     }
 
+    // [FEATURE:nested-comments] 답글 알림 — 부모 댓글 작성자에게. enum 마이그레이션을 피하려 COMMENT 타입 재사용,
+    // 메시지로 "답글"을 구분(프론트는 postId로 이동).
+    public void notifyReply(User recipient, Long postId) {
+        save(recipient, NotificationType.COMMENT, "내 댓글에 답글이 달렸어요", postId);
+    }
+    // [/FEATURE:nested-comments]
+
     public void notifyLike(User recipient, Long postId, String postTitle) {
         save(recipient, NotificationType.LIKE,
                 "내 글이 좋아요를 받았어요: \"" + preview(postTitle) + "\"", postId);

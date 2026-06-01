@@ -119,3 +119,37 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 3. DB/마이그레이션 변경 없음(스키마 무변경 — 기존 `users.cohort`/`campus` 컬럼 재사용).
 
 **미적용(후속 후보)**: 다른 캠퍼스/기수 라운지 브라우징(현재는 본인 소속만), 캠퍼스+기수 동시 필터, 라운지 전용 게시판/공지.
+
+---
+
+## nested-comments — 대댓글(1-depth 답글) (2026-06-02)
+
+§6-1. 댓글에 답글(1단계 계층) — 에타/대부분 커뮤니티식. **백엔드 + 프론트엔드.** Flyway **V3**.
+
+**범위/동작**
+- 데이터: `Comment.parentId`(Long, nullable, FK 없음 — `acceptedCommentId`와 동일 방침). null이면 최상위 댓글. **Flyway V3**(`comments.parent_id` + `idx_comments_parent_id`).
+- 작성: `POST /api/posts/{postId}/comments` 본문에 `parentId`(선택). 서버 검증 — 부모 존재(404)·동일 글 소속(404)·**부모가 최상위(1-depth 강제, 답글에 답글 금지 → 400 InvalidState)**.
+- 삭제: 최상위 댓글 삭제 시 그 답글들도 함께 정리(`CommentRepository.deleteByParentId`, bulk). 답글이면 자식이 없어 no-op. (글 삭제는 기존 `Post.comments` cascade로 일괄 — 변경 없음.)
+- 채택(qna-accept)과의 정합: **답글은 채택 불가**(`toggleAcceptAnswer`에 `parentId != null` 가드 추가, 프론트도 최상위만 채택 버튼 노출).
+- 별칭(op-alias)과의 정합: 답글도 댓글이라 `buildAliasMap`이 동일하게 별칭 부여(같은 유저=글 내내 같은 별칭, 최상위/답글 무관). 변경 없음.
+- 알림: 답글 작성 시 **부모 댓글 작성자**에게 알림(`NotificationService.notifyReply`, 본인 제외). enum 마이그레이션을 피하려 `NotificationType.COMMENT` 재사용 + 메시지로 "답글" 구분. 최상위 댓글은 기존대로 글 작성자에게.
+- 응답: `CommentResponse.parentId`. 프론트는 평면 목록(서버 createdAt asc)을 최상위/답글로 그룹핑.
+- UI: `PostDetailPage` 댓글 렌더를 `renderComment(comment, isReply)` 함수로 리팩터링 — 최상위 + 그 아래 답글(들여쓰기 `ml-6 border-l`) + "답글" 토글 버튼/입력. 채택·"답글" 버튼은 최상위만, 답글은 들여쓰기.
+
+**알려진 동작**: ① 최상위 댓글 삭제 시 **타인의 답글까지 cascade 삭제**(v1 단순화 — 후속: soft-delete "삭제된 댓글" placeholder로 답글 보존). ② 답글 알림 type은 COMMENT 재사용(`notifications.type`이 MySQL 네이티브 enum이라 REPLY 추가 시 enum 마이그레이션 필요 → 회피). ③ 댓글 수(피드/상세)는 답글 포함 총계.
+
+**마커 위치 (`[FEATURE:nested-comments]`)**
+- 백엔드: `domain/Comment.java`(`parentId` 필드), `dto/CommentCreateRequest.java`(`parentId`), `dto/CommentResponse.java`(`parentId` 필드+factory), `repository/CommentRepository.java`(`deleteByParentId`), `service/NotificationService.java`(`notifyReply`), `service/CommentService.java`(addComment 부모검증·답글알림·`parentId`, deleteComment 답글정리, toggleAcceptAnswer 1-depth 가드).
+- (신규) `resources/db/migration/V3__add_comment_parent.sql`, `test/service/CommentNestedServiceTest.java` — 파일 전체.
+- 프론트: `pages/PostDetailPage.jsx`(답글 상태/핸들러, 댓글 그룹핑 + `renderComment` 리팩터링, 답글 입력 폼). ⚠️ **이 리팩터링이 기존 평면 map(qna+op-alias 마커 포함)을 대체** — 롤백 시 평면 map으로 환원 필요.
+
+**롤백 절차**
+1. 위 파일들에서 `[FEATURE:nested-comments]` 마커 블록 제거.
+   - `CommentService`: addComment의 부모검증 블록·`.parentId(...)`·답글 알림 분기(`else` 포함) 제거 → 원래 `if(!post.author...)notifyComment` 복원. deleteComment의 `deleteByParentId` 제거. toggleAcceptAnswer의 1-depth 가드 제거.
+   - `CommentResponse`: `parentId` 필드 + factory의 `comment.getParentId()` 인자 제거.
+   - 나머지 파일(`Comment.parentId`, `CommentCreateRequest.parentId`, `CommentRepository.deleteByParentId`, `NotificationService.notifyReply`) 마커 블록 제거.
+   - `PostDetailPage`: `renderComment`/그룹핑/답글 상태·핸들러·폼 제거하고, 댓글 렌더를 평면 `comments.map`(qna-accept·op-alias 마커 포함 버전)으로 환원.
+2. 신규 파일 삭제: `V3__add_comment_parent.sql`, `test/service/CommentNestedServiceTest.java`.
+3. DB: `drop index idx_comments_parent_id on comments; alter table comments drop column parent_id;` (V3 적용 환경) — 미적용이면 불필요.
+
+**미적용(후속 후보)**: 답글 삭제 시 soft-delete placeholder(타인 답글 보존), 답글 N개 접기/펼치기, REPLY 알림 타입 분리(enum 마이그레이션), 답글에 멘션.

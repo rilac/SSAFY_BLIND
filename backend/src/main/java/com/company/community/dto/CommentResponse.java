@@ -30,6 +30,10 @@ public class CommentResponse {
     private boolean op;
     // [/FEATURE:op-alias]
 
+    // [FEATURE:nested-comments] 부모 댓글 id(대댓글). null이면 최상위 — 프론트가 답글을 부모 아래에 그룹핑.
+    private Long parentId;
+    // [/FEATURE:nested-comments]
+
     // author는 호출부에서 배치 조회한 작성자 User를 전달받는다.
     // [FEATURE:op-alias] alias(글쓴이/익명N) + isAuthor(글쓴이 여부)는 호출부(CommentService)에서 글 단위로 계산해 전달.
     public static CommentResponse of(Comment comment, Long currentUserId, User author,
@@ -41,7 +45,8 @@ public class CommentResponse {
                 AuthorInfo.of(author),
                 comment.getAuthor().getId().equals(currentUserId),
                 alias,
-                isAuthor
+                isAuthor,
+                comment.getParentId() // [FEATURE:nested-comments]
         );
     }
     // [/FEATURE:op-alias]

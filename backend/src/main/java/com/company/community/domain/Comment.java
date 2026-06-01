@@ -30,6 +30,11 @@ public class Comment {
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
 
+    // [FEATURE:nested-comments] 대댓글(1-depth) — 부모 댓글 id. null이면 최상위 댓글.
+    // FK 없이 단순 Long(acceptedCommentId와 동일 방침) — 부모 삭제 시 CommentService가 답글을 정리한다.
+    private Long parentId;
+    // [/FEATURE:nested-comments]
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
