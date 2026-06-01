@@ -9,6 +9,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 // 관리자 전용 — SecurityConfig에서 /api/admin/** 는 ROLE_ADMIN 필요
 @RestController
@@ -35,6 +36,16 @@ public class AdminController {
         adminService.restorePost(id);
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * [FEATURE:pinned-posts] POST /api/admin/posts/{id}/pin — 공지 고정 토글. 응답 { "pinned": bool }(새 상태).
+     */
+    @PostMapping("/posts/{id}/pin")
+    public ResponseEntity<Map<String, Boolean>> togglePin(@PathVariable Long id) {
+        boolean pinned = adminService.togglePin(id);
+        return ResponseEntity.ok(Map.of("pinned", pinned));
+    }
+    // [/FEATURE:pinned-posts]
 
     /**
      * GET /api/admin/feedback — 건의함 전체 조회

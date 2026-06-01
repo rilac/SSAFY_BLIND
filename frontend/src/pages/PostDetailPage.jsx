@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2, BarChart3, Check } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll]
+import { ArrowLeft, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2, BarChart3, Check, Pin } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll] · Pin: [FEATURE:pinned-posts]
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext'; // [FEATURE:pinned-posts] 관리자 여부 판별
 import ReportModal from '../components/ReportModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AlertDialog from '../components/AlertDialog';
@@ -23,6 +24,8 @@ const REACTION_META = {
 export default function PostDetailPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user } = useAuth(); // [FEATURE:pinned-posts]
+  const isAdmin = user?.role === 'ADMIN'; // [FEATURE:pinned-posts]
 
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
@@ -212,6 +215,22 @@ export default function PostDetailPage() {
   };
   // [/FEATURE:poll]
 
+  // [FEATURE:pinned-posts] 관리자 공지 고정 토글 — 서버가 새 상태 반환, 로컬 post에 반영.
+  const [pinLoading, setPinLoading] = useState(false);
+  const handleTogglePin = async () => {
+    if (pinLoading) return;
+    setPinLoading(true);
+    try {
+      const res = await api.post(`/admin/posts/${id}/pin`);
+      setPost((prev) => ({ ...prev, pinned: res.data.pinned }));
+    } catch {
+      setNotice({ title: '고정 실패', message: '공지 고정에 실패했습니다.' });
+    } finally {
+      setPinLoading(false);
+    }
+  };
+  // [/FEATURE:pinned-posts]
+
   const backBtn = (
     <button
       onClick={() => navigate('/feed')}
@@ -333,6 +352,13 @@ export default function PostDetailPage() {
         <article className="border border-border bg-card p-6 mb-4">
           <div className="flex items-start justify-between mb-3">
             <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
+              {/* [FEATURE:pinned-posts] 공지 고정 배지 */}
+              {post.pinned && (
+                <span className="flex items-center gap-1 px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold leading-none">
+                  <Pin size={10} /> 공지
+                </span>
+              )}
+              {/* [/FEATURE:pinned-posts] */}
               <span className="text-primary">[{categoryLabel(post.category)}]</span>
               {/* [FEATURE:qna-accept] 해결됨 배지 (채택된 답변 존재 시) */}
               {post.acceptedCommentId && (
@@ -347,22 +373,42 @@ export default function PostDetailPage() {
                 {post.author?.cohort} {post.author?.campus}
               </span>
             </div>
-            {post.isMine && (
+            {(post.isMine || isAdmin) && (
               <div className="flex items-center gap-2 shrink-0">
-                <button
-                  onClick={() => navigate(`/posts/${id}/edit`)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
-                >
-                  <Pencil size={12} />
-                  수정
-                </button>
-                <button
-                  onClick={requestDelete}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity"
-                >
-                  <Trash2 size={12} />
-                  삭제
-                </button>
+                {/* [FEATURE:pinned-posts] 관리자 공지 고정/해제 토글 — 본인 글 여부와 무관, 관리자에게만 노출 */}
+                {isAdmin && (
+                  <button
+                    onClick={handleTogglePin}
+                    disabled={pinLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border transition-colors disabled:opacity-50 ${
+                      post.pinned
+                        ? 'border-primary text-primary'
+                        : 'border-border hover:border-primary'
+                    }`}
+                  >
+                    <Pin size={12} fill={post.pinned ? 'currentColor' : 'none'} />
+                    {post.pinned ? '고정 해제' : '공지 고정'}
+                  </button>
+                )}
+                {/* [/FEATURE:pinned-posts] */}
+                {post.isMine && (
+                  <>
+                    <button
+                      onClick={() => navigate(`/posts/${id}/edit`)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
+                    >
+                      <Pencil size={12} />
+                      수정
+                    </button>
+                    <button
+                      onClick={requestDelete}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity"
+                    >
+                      <Trash2 size={12} />
+                      삭제
+                    </button>
+                  </>
+                )}
               </div>
             )}
           </div>

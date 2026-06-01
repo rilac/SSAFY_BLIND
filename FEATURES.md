@@ -273,3 +273,34 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 3. DB/마이그레이션 변경 없음(notifications 테이블·SYSTEM enum 재사용).
 
 **미적용(후속 후보)**: 수신 거부(opt-out) 플래그, 중복 발송 가드("이번 주 이미 발송" 체크), 채널 확장(MM DM/이메일), window/Top N 사용자 설정, 다이제스트 전용 알림 타입(현재 SYSTEM 재사용).
+
+---
+
+## pinned-posts — 공지/고정글 (2026-06-02)
+
+§6-2. 관리자가 글을 **상단 고정(공지)** → 피드에서 항상 최상단 + "공지" 배지. **백엔드 + 프론트엔드**, Flyway **V6**.
+
+**범위/동작**
+- 데이터: `posts.pinned`(boolean, `@Builder.Default false`) — 기존 `hidden`/`reviewed`와 동일하게 `bit not null`. **Flyway V6**(`alter table posts add column pinned bit not null default 0`).
+- 토글: `POST /api/admin/posts/{id}/pin` — **관리자 전용**(SecurityConfig `/api/admin/**` = ROLE_ADMIN), 호출 시 고정↔해제 토글, 응답 `{ "pinned": bool }`(새 상태). `Post.togglePin()` 도메인 메서드(@Setter 금지).
+- 정렬: `PostRepository.findFilteredLatest`/`findFilteredPopular` 두 쿼리의 `ORDER BY` **맨 앞에 `p.pinned DESC` 추가** → 현재 필터(카테고리/검색/라운지) 결과 내에서 고정 글이 항상 먼저, 동순위는 기존 정렬(최신/인기순). **전역 강제 노출이 아니라 정렬 키**(필터에 안 걸리면 그 뷰에는 안 보임, 페이지 2+에는 고정 글 미노출 — 일반적 공지 동작).
+- 응답: `PostListResponse.pinned`(피드 배지) + `PostResponse.pinned`(상세 버튼 상태/배지). 둘 다 factory에서 `post.isPinned()`를 직접 읽어 **PostService 호출부 무변경**(solved 패턴과 동일).
+- UI: `PostCard` "공지" 배지(Pin 아이콘, 가장 앞). `PostDetailPage`는 `useAuth`로 관리자 판별 → 헤더 액션 영역에 "공지 고정/고정 해제" 토글 버튼(관리자에게만, 본인 글 여부 무관) + 상단 "공지" 배지.
+
+**알려진 동작/한계**: ① 고정은 **정렬 키**일 뿐(필터 무시 전역 공지 아님) — 라운지/카테고리 필터에 안 맞으면 그 뷰엔 안 보임. ② 다중 고정 가능(여러 글 동시 고정 시 그들끼리는 createdAt/인기순). ③ 고정 글도 페이지네이션 적용(1페이지 상단에만, 2페이지+엔 미노출). ④ 고정 전용 알림 없음. ⑤ V6는 단순 컬럼 추가(boolean=bit not null) — Hibernate가 boolean을 bit로 매핑(V1 baseline의 hidden/reviewed와 동일)하므로 validate 통과, **실 MySQL 첫 기동 시 확인 권장**.
+
+**마커 위치 (`[FEATURE:pinned-posts]`)**
+- 백엔드(수정): `domain/Post.java`(`pinned` 필드 + `togglePin()`), `repository/PostRepository.java`(두 쿼리 ORDER BY `p.pinned DESC`), `dto/PostListResponse.java`·`dto/PostResponse.java`(`pinned` 필드 + factory `post.isPinned()`), `service/AdminService.java`(`togglePin`), `controller/AdminController.java`(`POST /posts/{id}/pin` + `Map` import). 테스트: `AdminServiceTest`(토글 1종, 마커 블록).
+- (신규) 백엔드: `resources/db/migration/V6__add_post_pinned.sql`, `test/repository/PostPinnedRepositoryTest.java`(@DataJpaTest 3종 — 최신순/인기순 고정 우선·고정없음) — 파일 전체.
+- 프론트: `components/PostCard.jsx`(공지 배지 + `Pin` import), `pages/PostDetailPage.jsx`(`useAuth`/`Pin` import, `isAdmin`, `handleTogglePin`/`pinLoading`, 헤더 토글 버튼[`post.isMine` → `post.isMine || isAdmin`로 확장 + 수정/삭제를 `post.isMine` 프래그먼트로], 상단 공지 배지).
+
+**롤백 절차**
+1. 위 파일들에서 `[FEATURE:pinned-posts]` 마커 블록 제거.
+   - `PostRepository`: 두 메서드 ORDER BY에서 `p.pinned DESC, ` 제거 → `ORDER BY p.createdAt DESC` / `ORDER BY COUNT(pl) DESC, p.createdAt DESC`로 환원.
+   - `PostListResponse`/`PostResponse`: `pinned` 필드 + factory의 `post.isPinned()` 인자 제거.
+   - `AdminController`: pin 엔드포인트 + `Map` import 제거. `AdminService.togglePin`, `Post.pinned`/`togglePin` 제거.
+   - `PostDetailPage`: 헤더 액션을 `{post.isMine && (...수정/삭제...)}`로 환원, `useAuth`/`Pin` import·`isAdmin`·`handleTogglePin`·`pinLoading`·공지 배지 제거. `PostCard` 공지 배지·`Pin` import 제거.
+2. 신규 파일 삭제: `V6__add_post_pinned.sql`, `test/repository/PostPinnedRepositoryTest.java`. `AdminServiceTest`의 토글 블록 제거.
+3. DB: `alter table posts drop column pinned;` (V6 적용 환경) — 미적용이면 불필요.
+
+**미적용(후속 후보)**: 전역 공지(필터 무시 항상 노출), 고정 만료/예약, 고정 순서 지정, 카테고리별 공지, 고정 시 작성자/유저 알림, 관리자 페이지에서 고정 목록 관리.

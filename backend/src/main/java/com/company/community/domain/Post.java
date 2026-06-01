@@ -49,6 +49,11 @@ public class Post {
     @Builder.Default
     private boolean reviewed = false;
 
+    // [FEATURE:pinned-posts] 관리자 공지 고정 — true면 피드에서 항상 최상단. 신규 글 기본 미고정. Flyway V6로 컬럼 추가.
+    @Builder.Default
+    private boolean pinned = false;
+    // [/FEATURE:pinned-posts]
+
     // [FEATURE:qna-accept] QUESTION 글의 채택된 답변(댓글) id. null이면 미해결.
     // FK 없이 단순 Long — 채택 댓글 삭제 시 CommentService가 이 값을 정리한다(댕글링 방지).
     private Long acceptedCommentId;
@@ -93,6 +98,12 @@ public class Post {
         this.hidden = false;
         this.reviewed = true;
     }
+
+    // [FEATURE:pinned-posts] 공지 고정 토글 — @Setter 금지, 도메인 메서드로만 변경. 관리자 액션에서만 호출.
+    public void togglePin() {
+        this.pinned = !this.pinned;
+    }
+    // [/FEATURE:pinned-posts]
 
     // [FEATURE:qna-accept] 답변 채택/해제 — @Setter 금지, 도메인 메서드로만 변경
     public void acceptAnswer(Long commentId) {

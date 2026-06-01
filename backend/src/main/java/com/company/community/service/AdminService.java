@@ -51,4 +51,14 @@ public class AdminService {
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
         post.restore();
     }
+
+    // [FEATURE:pinned-posts] 공지 고정 토글 — 관리자만(컨트롤러 /api/admin/** = ROLE_ADMIN). 토글 후 새 고정 상태 반환.
+    @Transactional
+    public boolean togglePin(Long postId) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+        post.togglePin();
+        return post.isPinned();
+    }
+    // [/FEATURE:pinned-posts]
 }

@@ -72,6 +72,22 @@ class AdminServiceTest {
         assertThat(post.isReviewed()).isTrue();
     }
 
+    // [FEATURE:pinned-posts] 공지 고정 토글 — 미고정→고정→해제, 새 상태 반환.
+    @Test
+    @DisplayName("공지 고정 토글은 상태를 뒤집고 새 상태를 반환한다")
+    void test_공지_고정_토글() {
+        given(postRepository.findById(10L)).willReturn(Optional.of(post));
+
+        boolean afterPin = adminService.togglePin(10L); // 미고정 → 고정
+        assertThat(afterPin).isTrue();
+        assertThat(post.isPinned()).isTrue();
+
+        boolean afterUnpin = adminService.togglePin(10L); // 고정 → 해제
+        assertThat(afterUnpin).isFalse();
+        assertThat(post.isPinned()).isFalse();
+    }
+    // [/FEATURE:pinned-posts]
+
     private void setId(Object obj, Long id) {
         try {
             var field = obj.getClass().getDeclaredField("id");

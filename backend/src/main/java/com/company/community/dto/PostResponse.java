@@ -44,6 +44,11 @@ public class PostResponse {
     private PollResponse poll;
     // [/FEATURE:poll]
 
+    // [FEATURE:pinned-posts] 관리자 공지 고정 여부 — 상세 페이지 관리자 고정/해제 버튼 상태 + 공지 배지용.
+    @JsonProperty("pinned")
+    private boolean pinned;
+    // [/FEATURE:pinned-posts]
+
     // ★ 가명(닉네임·기수·지역)만 노출 — mmUserId/email 등 실제 신원은 포함하지 않는다.
     // author는 호출부에서 배치 조회한 작성자 User를 전달받는다. poll은 호출부(PostService)에서 PollService로 계산해 전달(투표 없으면 null).
     // [FEATURE:reactions] isLiked/likeCount 자리에 reactions(ReactionResponse)를 받는다. reactions는 호출부(PostService)에서 계산.
@@ -71,7 +76,8 @@ public class PostResponse {
                 reactions, // [FEATURE:reactions]
                 isBookmarked,
                 post.getAcceptedCommentId(), // [FEATURE:qna-accept]
-                poll // [FEATURE:poll]
+                poll, // [FEATURE:poll]
+                post.isPinned() // [FEATURE:pinned-posts]
         );
     }
 }

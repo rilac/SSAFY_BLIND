@@ -1,4 +1,4 @@
-import { Flag, Eye, ThumbsUp, MessageSquare, Bookmark, CheckCircle2, BarChart3 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3: [FEATURE:poll]
+import { Flag, Eye, ThumbsUp, MessageSquare, Bookmark, CheckCircle2, BarChart3, Pin } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3: [FEATURE:poll] · Pin: [FEATURE:pinned-posts]
 import { formatTimestamp, formatNumber } from '../lib/format';
 import { categoryLabel } from '../lib/categories';
 
@@ -11,6 +11,13 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
+          {/* [FEATURE:pinned-posts] 공지 고정 배지 — 가장 앞에 노출 */}
+          {post.pinned && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold leading-none">
+              <Pin size={10} /> 공지
+            </span>
+          )}
+          {/* [/FEATURE:pinned-posts] */}
           {/* [FEATURE:unread-new] 안 읽은 새 글 배지 */}
           {post.isNew && (
             <span className="px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold leading-none">

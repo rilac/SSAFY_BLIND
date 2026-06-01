@@ -52,6 +52,11 @@ public class PostListResponse {
     private boolean isRead;
     // [/FEATURE:unread-new]
 
+    // [FEATURE:pinned-posts] 관리자 공지 고정 여부 — 피드 카드 "공지" 배지용. post에서 직접 읽어 호출부 무변경.
+    @JsonProperty("pinned")
+    private boolean pinned;
+    // [/FEATURE:pinned-posts]
+
     // ★ 가명(닉네임·기수·지역)만 노출. author는 호출부에서 배치 조회한 작성자 User.
     public static PostListResponse of(Post post, long commentCount, Long currentUserId,
                                       long reactionTotal, String myReaction, boolean isBookmarked, User author,
@@ -70,7 +75,8 @@ public class PostListResponse {
                 isBookmarked,
                 post.getAcceptedCommentId() != null, // [FEATURE:qna-accept] solved
                 hasPoll, // [FEATURE:poll]
-                isNew, isRead // [FEATURE:unread-new]
+                isNew, isRead, // [FEATURE:unread-new]
+                post.isPinned() // [FEATURE:pinned-posts]
         );
     }
 }

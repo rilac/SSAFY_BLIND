@@ -33,7 +33,8 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             "AND (:cohort IS NULL OR p.author.cohort = :cohort) " +
             "AND (:campus IS NULL OR p.author.campus = :campus) " +
             // [/FEATURE:cohort-campus-lounge]
-            "ORDER BY p.createdAt DESC",
+            // [FEATURE:pinned-posts] 공지 고정 글을 항상 최상단(필터 결과 내). 동순위는 기존 최신순.
+            "ORDER BY p.pinned DESC, p.createdAt DESC",
            countQuery = "SELECT COUNT(p) FROM Post p " +
             "WHERE p.hidden = false AND (:category IS NULL OR p.category = :category) " +
             "AND (:keyword IS NULL OR p.title LIKE CONCAT('%', :keyword, '%') OR p.content LIKE CONCAT('%', :keyword, '%')) " +
@@ -61,7 +62,8 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             "AND (:cohort IS NULL OR p.author.cohort = :cohort) " +
             "AND (:campus IS NULL OR p.author.campus = :campus) " +
             // [/FEATURE:cohort-campus-lounge]
-            "GROUP BY p ORDER BY COUNT(pl) DESC, p.createdAt DESC",
+            // [FEATURE:pinned-posts] 공지 고정 글을 항상 최상단(필터 결과 내). 동순위는 기존 인기순(좋아요수→최신).
+            "GROUP BY p ORDER BY p.pinned DESC, COUNT(pl) DESC, p.createdAt DESC",
            countQuery = "SELECT COUNT(p) FROM Post p " +
             "WHERE p.hidden = false AND (:category IS NULL OR p.category = :category) " +
             "AND (:keyword IS NULL OR p.title LIKE CONCAT('%', :keyword, '%') OR p.content LIKE CONCAT('%', :keyword, '%')) " +
