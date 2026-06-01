@@ -46,10 +46,17 @@ public class PostListResponse {
     private boolean hasPoll;
     // [/FEATURE:poll]
 
+    // [FEATURE:unread-new] isNew: 안 읽은 새 글(작성자 아님 + 미열람 + 최근). isRead: 이미 연 글(읽음 표시용).
+    @JsonProperty("isNew")
+    private boolean isNew;
+    @JsonProperty("isRead")
+    private boolean isRead;
+    // [/FEATURE:unread-new]
+
     // ★ 가명(닉네임·기수·지역)만 노출. author는 호출부에서 배치 조회한 작성자 User.
     public static PostListResponse of(Post post, long commentCount, Long currentUserId,
                                       boolean isLiked, long likeCount, boolean isBookmarked, User author,
-                                      boolean hasPoll) {
+                                      boolean hasPoll, boolean isNew, boolean isRead) {
         return new PostListResponse(
                 post.getId(),
                 post.getCategory(),
@@ -63,7 +70,8 @@ public class PostListResponse {
                 likeCount,
                 isBookmarked,
                 post.getAcceptedCommentId() != null, // [FEATURE:qna-accept] solved
-                hasPoll // [FEATURE:poll]
+                hasPoll, // [FEATURE:poll]
+                isNew, isRead // [FEATURE:unread-new]
         );
     }
 }

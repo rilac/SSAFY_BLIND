@@ -2,6 +2,7 @@ package com.company.community.service;
 
 import com.company.community.domain.*;
 import com.company.community.dto.PostCreateRequest;
+import com.company.community.dto.PostListResponse; // [FEATURE:unread-new]
 import com.company.community.dto.PostResponse;
 import com.company.community.exception.ForbiddenException;
 import com.company.community.repository.BookmarkRepository;
@@ -21,8 +22,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import org.springframework.data.domain.PageImpl;
+
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -288,6 +293,46 @@ class PostServiceTest {
         assertThat(campusCap.getValue()).isNull();
     }
     // [/FEATURE:cohort-campus-lounge]
+
+    // [FEATURE:unread-new] 안 읽은 새 글(NEW)/읽음 표시 계산
+    @Test
+    @DisplayName("getAllPosts: 미열람+최근=NEW, 열람=읽음, 본인 글/오래된 글은 NEW 아님")
+    void test_안읽은_새글_읽음_표시() {
+        LocalDateTime now = LocalDateTime.now();
+        Post recentUnread = postWith(11L, otherUser, now);            // 미열람+최근 → NEW
+        Post recentRead = postWith(12L, otherUser, now);              // 열람 → 읽음
+        Post mine = postWith(13L, author, now);                      // 본인 글 → NEW 아님
+        Post oldUnread = postWith(14L, otherUser, now.minusDays(10)); // 오래됨 → NEW 아님
+
+        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), any()))
+                .willReturn(new PageImpl<>(List.of(recentUnread, recentRead, mine, oldUnread)));
+        given(commentRepository.countByPostIds(any())).willReturn(List.of());
+        given(postLikeRepository.countByPostIds(any())).willReturn(List.of());
+        given(postLikeRepository.findLikedPostIds(any(), anyLong())).willReturn(List.of());
+        given(bookmarkRepository.findBookmarkedPostIds(any(), anyLong())).willReturn(List.of());
+        given(pollService.hasPollPostIds(any())).willReturn(Set.of());
+        given(postViewRepository.findViewedPostIds(any(), anyLong())).willReturn(List.of(12L)); // recentRead만 열람
+        given(userRepository.findAllById(any())).willReturn(List.of(author, otherUser));
+
+        // currentUserId = author(1L)
+        List<PostListResponse> content = postService
+                .getAllPosts(0, 20, 1L, null, null, "latest", "all").getContent();
+
+        assertThat(content.get(0).isNew()).isTrue();   // recentUnread
+        assertThat(content.get(0).isRead()).isFalse();
+        assertThat(content.get(1).isNew()).isFalse();  // recentRead
+        assertThat(content.get(1).isRead()).isTrue();
+        assertThat(content.get(2).isNew()).isFalse();  // mine(본인 글)
+        assertThat(content.get(3).isNew()).isFalse();  // oldUnread(7일 초과)
+    }
+
+    private Post postWith(Long id, User postAuthor, LocalDateTime createdAt) {
+        Post p = Post.builder().title("t").content("c").category(PostCategory.FREE)
+                .author(postAuthor).createdAt(createdAt).build();
+        setId(p, id);
+        return p;
+    }
+    // [/FEATURE:unread-new]
 
     // 리플렉션으로 DTO 필드 설정
     private void setField(Object obj, String fieldName, Object value) {

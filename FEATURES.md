@@ -187,3 +187,33 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 3. DB: `drop table poll_votes; drop table poll_options;` (V4 적용 환경).
 
 **미적용(후속 후보)**: 멀티 선택, 투표 전 결과 숨김, 마감일/자동 마감, 투표 수정(편집), 투표 결과 글에 고정.
+
+---
+
+## unread-new — 읽음 표시 / 안 읽은 새 글 배지 (2026-06-02)
+
+§6-5 C ☆. 피드에서 안 읽은 새 글에 "NEW" 배지 + 이미 연 글은 흐리게(읽음 표시). **기존 `PostView`(M-NEW-5) 재사용 → 스키마 변경/Flyway 없음.** 프론트는 배지/스타일만.
+
+**범위/동작**
+- `PostView`(상세 조회 시 기록, 작성자 제외)의 존재 = "그 유저가 글을 연 적 있음". 이를 재사용해 피드 항목마다:
+  - `isRead` = 현재 유저의 `PostView` 존재(연 적 있음).
+  - `isNew` = **작성자 본인 아님 + 미열람 + 최근 작성(기본 7일 내)**. → "안 읽은 새 글".
+- 글을 열면(`getPost`이 `PostView` 기록) **다음 피드 로드에서 NEW 사라지고 읽음 처리** — 별도 "읽음 처리" API 불필요.
+- 배치: `PostViewRepository.findViewedPostIds(postIds, userId)`(N+1 방지)로 열람 글 id 집합을 구하고, `PostService.getAllPosts`가 `isNew`/`isRead` 계산. window는 `NEW_POST_WINDOW_DAYS=7` 상수.
+- 응답: `PostListResponse.isNew`/`isRead`. UI: `PostCard` "NEW" 배지(primary) + 읽은 글(새 글 아님) 제목 `text-muted-foreground`로 흐리게.
+
+**알려진 동작/한계**: ① "읽음"은 **상세를 연 경우만**(피드 스크롤만으로는 읽음 처리 안 됨) — `PostView` 기준. ② 작성자 본인 글은 NEW 아님(`isRead`도 false라 흐려지지 않음). ③ window 7일 고정(상수). ④ 상세 페이지엔 별도 읽음 UI 없음(피드 한정). ⑤ `PostView`는 24h 카운트 dedup이 있으나 레코드 자체는 첫 열람에 생성·유지되므로 읽음 판정에 영향 없음.
+
+**마커 위치 (`[FEATURE:unread-new]`)**
+- 백엔드: `repository/PostViewRepository.java`(`findViewedPostIds`), `dto/PostListResponse.java`(`isNew`/`isRead` 필드+factory), `service/PostService.java`(`NEW_POST_WINDOW_DAYS` 상수 + getAllPosts의 `viewedPostIds` 배치·`isNew`/`isRead` 계산), `test/service/PostServiceTest.java`(`test_안읽은_새글_읽음_표시` + `postWith` 헬퍼).
+- 프론트: `components/PostCard.jsx`("NEW" 배지 + 읽은 글 제목 흐리게).
+
+**롤백 절차**
+1. `[FEATURE:unread-new]` 마커 블록 제거.
+   - `PostListResponse`: `isNew`/`isRead` 필드 + factory 파라미터 제거 → 호출부(`PostService.getAllPosts`)의 `isNew`/`viewed` 인자 환원.
+   - `PostService`: `NEW_POST_WINDOW_DAYS`·`viewedPostIds`·`newCutoff`·`isNew` 계산 제거.
+   - `PostViewRepository.findViewedPostIds` 제거. `PostServiceTest`의 unread-new 테스트·`postWith` 제거.
+   - `PostCard`의 NEW 배지·제목 흐리게 제거.
+2. 신규 파일 없음. DB/마이그레이션 변경 없음.
+
+**미적용(후속 후보)**: 피드 노출만으로 읽음 처리(IntersectionObserver), 마지막 방문 기준 "새 글 N개" 요약, window 사용자 설정, 상세 페이지 읽음 표시.

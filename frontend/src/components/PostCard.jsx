@@ -11,6 +11,13 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
+          {/* [FEATURE:unread-new] 안 읽은 새 글 배지 */}
+          {post.isNew && (
+            <span className="px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold leading-none">
+              NEW
+            </span>
+          )}
+          {/* [/FEATURE:unread-new] */}
           <span className="text-primary">[{categoryLabel(post.category)}]</span>
           <span className="text-muted-foreground">{post.author?.nickname}</span>
           <span className="text-muted-foreground opacity-50">•</span>
@@ -47,7 +54,12 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
         </button>
       </div>
 
-      <h2 className="text-base font-semibold mb-4 group-hover:text-primary transition-colors">
+      {/* [FEATURE:unread-new] 이미 연 글(새 글 아님)은 제목을 흐리게 — 읽음 표시 */}
+      <h2
+        className={`text-base font-semibold mb-4 group-hover:text-primary transition-colors ${
+          post.isRead && !post.isNew ? 'text-muted-foreground' : ''
+        }`}
+      >
         {post.title}
       </h2>
 

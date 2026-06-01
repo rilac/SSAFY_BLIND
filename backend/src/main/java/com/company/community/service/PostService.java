@@ -46,6 +46,9 @@ public class PostService {
     // M-NEW-5: 동일 유저의 재조회를 같은 글에 대해 이 시간 내에는 1회만 카운트.
     private static final long VIEW_DEDUP_HOURS = 24;
 
+    // [FEATURE:unread-new] "새 글" NEW 배지를 띄울 최대 기간 — 이 기간 내 작성됐고 아직 안 연 글만 NEW.
+    private static final long NEW_POST_WINDOW_DAYS = 7;
+
     /**
      * 게시글 작성 — author는 서버에서만 관리, 응답에는 노출하지 않음
      */
@@ -173,6 +176,7 @@ public class PostService {
         Set<Long> bookmarkedSet = new HashSet<>();
         Map<Long, User> authorMap = new HashMap<>();
         Set<Long> pollPostIds = new HashSet<>(); // [FEATURE:poll] 투표 있는 글 id
+        Set<Long> viewedPostIds = new HashSet<>(); // [FEATURE:unread-new] 현재 유저가 이미 연 글 id
         if (!postIds.isEmpty()) {
             commentRepository.countByPostIds(postIds)
                     .forEach(row -> commentCountMap.put((Long) row[0], (Long) row[1]));
@@ -181,6 +185,7 @@ public class PostService {
             likedSet.addAll(postLikeRepository.findLikedPostIds(postIds, currentUserId));
             bookmarkedSet.addAll(bookmarkRepository.findBookmarkedPostIds(postIds, currentUserId));
             pollPostIds.addAll(pollService.hasPollPostIds(postIds)); // [FEATURE:poll]
+            viewedPostIds.addAll(postViewRepository.findViewedPostIds(postIds, currentUserId)); // [FEATURE:unread-new]
 
             List<Long> authorIds = posts.stream()
                     .map(p -> p.getAuthor().getId())
@@ -189,6 +194,7 @@ public class PostService {
             userRepository.findAllById(authorIds).forEach(u -> authorMap.put(u.getId(), u));
         }
 
+        LocalDateTime newCutoff = LocalDateTime.now().minusDays(NEW_POST_WINDOW_DAYS); // [FEATURE:unread-new]
         List<PostListResponse> content = posts.stream()
                 .map(post -> {
                     Long pid = post.getId();
@@ -197,8 +203,12 @@ public class PostService {
                     boolean isLiked = likedSet.contains(pid);
                     boolean isBookmarked = bookmarkedSet.contains(pid);
                     User author = authorMap.get(post.getAuthor().getId());
+                    // [FEATURE:unread-new] 작성자 본인 글 제외 · 미열람 + 최근이면 NEW · 연 적 있으면 읽음(isRead).
+                    boolean viewed = viewedPostIds.contains(pid);
+                    boolean isNew = !post.getAuthor().getId().equals(currentUserId)
+                            && !viewed && post.getCreatedAt().isAfter(newCutoff);
                     return PostListResponse.of(post, commentCount, currentUserId, isLiked, likeCount, isBookmarked,
-                            author, pollPostIds.contains(pid)); // [FEATURE:poll] hasPoll
+                            author, pollPostIds.contains(pid), isNew, viewed); // [FEATURE:poll] hasPoll · [FEATURE:unread-new] isNew/isRead
                 })
                 .collect(Collectors.toList());
 
