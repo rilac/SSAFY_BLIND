@@ -4,8 +4,8 @@
 분석/계획 문서는 [MoreDevelopments.md](./MoreDevelopments.md)(1차) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md)(2차)이며, 본 문서는 **무엇을 실제로 구현했는지**를 한곳에 모은 진행 현황입니다.
 
 - 최종 업데이트: 2026-06-02
-- Git: **Phase 0~D + Access/Refresh + Flyway(M-NEW-7) + Phase E 4기능 커밋·푸시 완료**(`origin/main` — 최신 `72667be`; doc-sync `804ce98`). Phase E는 기능별 4커밋(`2805f0f` markdown → `e2e6c17` qna-accept → `0ea272b` op-alias → `72667be` cohort-campus-lounge). **대댓글(nested-comments)은 구현 완료·미커밋**(로컬 작업트리 — Flyway V3 동반).
-- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway**) → **Phase E 진행 중**(✅ 마크다운/코드블록 · ✅ Q&A 채택/해결됨 · ✅ OP 표시+글 단위 익명 별칭 · ✅ 기수/캠퍼스 라운지 · ✅ 대댓글(1-depth, 미커밋)) → **남은 것: §6 백로그(모더레이션 강화·리액션·투표 등) + 테스트 폭**
+- Git: **Phase 0~D + Access/Refresh + Flyway + Phase E 5기능 커밋·푸시 완료**(`origin/main` — 최신 `e3c3995`). Phase E 커밋: `2805f0f` markdown → `e2e6c17` qna-accept → `0ea272b` op-alias → `72667be` cohort-campus-lounge → `804ce98` docs-sync → `e3c3995` nested-comments(Flyway V3). **익명 투표(poll)는 구현 완료·미커밋**(로컬 작업트리 — Flyway V4 동반).
+- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway**) → **Phase E 진행 중**(✅ 마크다운/코드블록 · ✅ Q&A 채택/해결됨 · ✅ OP 표시+글 단위 익명 별칭 · ✅ 기수/캠퍼스 라운지 · ✅ 대댓글(1-depth) · ✅ 익명 투표(미커밋)) → **남은 것: §6 백로그(모더레이션 강화·리액션 등) + 테스트 폭**
 - ✅ **Access/Refresh 토큰 분리 구현 완료(2026-06-02)**: 짧은 Access(30m, stateless) + DB 저장 Refresh(14d, `refresh_tokens`) + `/api/auth/refresh` 회전 재발급 + 만료 정리 스케줄러. 검증: backend `./gradlew.bat test` BUILD SUCCESSFUL, frontend `npm run build` 성공. *(아래 "✅ Refresh Token 도입" 섹션)*
 - ✅ **M-NEW-7 Flyway 도입 완료(2026-06-02)**: Hibernate가 생성한 `V1__baseline.sql`(=validate와 정확히 일치) + `baseline-on-migrate`로 기존/신규 DB 모두 안전 처리. dev/prod 모두 Flyway ON·`ddl-auto: validate`, 테스트(H2)는 Flyway OFF. **배포 전 수동 DDL 폐기.** *(아래 "✅ M-NEW-7 Flyway" 섹션)*
 - 운영 완성도 추이: 1차 65~70% → Phase 0 후 70~75% → Phase A·B 후 배포 가능 → Phase C 후 UX/정책 마감 → Phase D(운영품질)+Access/Refresh+Flyway 완료(약 92%) → **Phase E(기능 확장) 진행 중**
@@ -17,10 +17,10 @@
 
 > 재개용 체크리스트. 상세는 각 섹션 참조. 현재 모든 작업트리 변경은 **검증 완료(테스트/빌드 통과)** 상태.
 
-1. **미커밋 정리 (먼저)** — **대댓글(nested-comments)** 구현 완료·미커밋. 커밋 권장: `feat: 대댓글(1-depth 답글) (Phase E)` — `FEATURES.md` nested-comments 범위 (+ Flyway `V3`). (Phase E 앞 4기능은 `72667be`로 푸시됨.)
-2. **다음 기능 (문서 권장 순)** — Phase E A/B ★ 우선순위 소진. 남은 §6 백로그 중 택1: **리액션 확장**(도움돼요/정보/공감, §6-3/C) 또는 **모더레이션 강화**(소프트삭제+휴지통·감사 로그·강제 숨김, §6 운영품질) 또는 **익명 투표/설문**(§6-5 B ☆) 또는 **스터디/팀원 모집 게시판**(§6-5 A ★). 착수 시 롤백 마커 + `FEATURES.md` 인덱싱.
-3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1+V2+V3 자동 적용**(`flyway_schema_history`; `accepted_comment_id`·`parent_id` 컬럼). op-alias·라운지는 스키마 무변경. 채택/마크다운/별칭/라운지/대댓글 E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료).
-4. **테스트 폭(여력 시)** — 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (CommentService 단위[채택·별칭·대댓글]·PostService 단위[scope]·삭제 통합·라운지 @DataJpaTest·헬스/인가 스모크·RefreshTokenService는 완료)
+1. **미커밋 정리 (먼저)** — **익명 투표(poll)** 구현 완료·미커밋. 커밋 권장: `feat: 익명 투표/설문 (Phase E)` — `FEATURES.md` poll 범위 (+ Flyway `V4`). (대댓글까지 `e3c3995`로 푸시됨.)
+2. **다음 기능 (문서 권장 순)** — Phase E A/B ★ 우선순위 소진(스터디 모집은 익명 보드 특성상 제외). 남은 §6 백로그 중 택1: **리액션 확장**(도움돼요/정보/공감, §6-3/C) 또는 **모더레이션 강화**(소프트삭제+휴지통·감사 로그·강제 숨김, §6 운영품질) 또는 **읽음 표시/안 읽은 새 글**(§6-5 C ☆) 등. 착수 시 롤백 마커 + `FEATURES.md` 인덱싱.
+3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1~V4 자동 적용**(`flyway_schema_history`; `accepted_comment_id`·`parent_id`·`poll_options`/`poll_votes`). op-alias·라운지는 스키마 무변경. 채택/마크다운/별칭/라운지/대댓글/투표 E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료). ⚠️ V4는 수기 DDL이라 실 MySQL `validate` 최종 확인 권장.
+4. **테스트 폭(여력 시)** — 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (CommentService 단위[채택·별칭·대댓글]·PostService 단위[scope]·PollService 단위·삭제 통합·라운지 @DataJpaTest·헬스/인가 스모크·RefreshTokenService는 완료)
 
 ---
 
@@ -209,7 +209,7 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 **롤백**: `FEATURES.md`의 `cohort-campus-lounge` 절차(스키마 무변경 — 기존 `users.cohort/campus` 재사용).
 **후속 후보**: 타 캠퍼스/기수 브라우징, 캠퍼스+기수 동시 필터, 라운지 전용 게시판.
 
-### nested-comments — 대댓글(1-depth 답글) (2026-06-02, 미커밋)
+### nested-comments — 대댓글(1-depth 답글) (2026-06-02, 커밋·푸시 `e3c3995`)
 §6-1. 댓글에 1단계 답글(에타식). **백엔드 + 프론트**, **Flyway V3**. 검증: backend `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `CommentNestedServiceTest` 5종 + 기존 댓글 테스트 그린), frontend `npm run build` 성공(메인 273KB).
 
 | 항목 | 핵심 | 파일 |
@@ -223,6 +223,22 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 
 **롤백**: `FEATURES.md`의 `nested-comments` 절차(V3 컬럼·인덱스 drop 포함). ⚠️ PostDetailPage는 `renderComment` 리팩터링이 평면 map(qna+op 마커 포함)을 대체 → 롤백 시 평면 map 환원.
 **후속 후보**: 답글 삭제 시 soft-delete placeholder(타인 답글 보존), REPLY 알림 타입 분리, 멘션.
+
+### poll — 익명 투표/설문 (2026-06-02, 미커밋)
+§6-5 B ☆. 게시글에 선택적 익명 투표(집계만 노출 → 익명 보드에 적합). **백엔드 + 프론트**, **Flyway V4**. 검증: backend `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `PollServiceTest` 11종 + PostService/삭제통합 갱신), frontend `npm run build` 성공(메인 277KB).
+
+| 항목 | 핵심 | 파일 |
+|---|---|---|
+| 데이터 | `poll_options`(post_id·content·sort_order) + `poll_votes`(post_id·option_id[FK없음]·user_id·**unique(post_id,user_id)**). **Flyway V4** | (신규) `domain/PollOption`·`PollVote`, `db/migration/V4__add_poll.sql` |
+| 익명/1인1표 | user_id로 중복 방지하되 노출은 보기별 집계만(누가 뭘 골랐는지 미노출) | `repository/PollVoteRepository` |
+| 작성/검증 | `PostCreateRequest.pollOptions`(선택) → `PollService.createOptions` 2~8개·100자 검증 | `dto/PostCreateRequest`, `service/PollService` |
+| 투표 | `POST …/poll/vote {optionId}` 토글(신규/변경/같은 보기=취소), 동시성 유니크 흡수 | `controller/PollController`, `service/PollService` |
+| 응답/배지 | `PostResponse.poll`(보기·집계·myOptionId; 없으면 null), `PostListResponse.hasPoll` | `dto/PostResponse`·`PostListResponse`, `service/PostService` |
+| UI | 작성 폼 투표 토글+보기 입력(작성만), 상세 막대그래프+퍼센트+클릭 투표, 피드 "투표" 배지 | `components/PostForm`·`PostCard`, `pages/PostCreatePage`·`PostDetailPage` |
+| 테스트 | createOptions 검증·vote 신규/변경/취소·잘못된 보기·집계 11종 | (신규) `test/service/PollServiceTest` |
+
+**롤백**: `FEATURES.md`의 `poll` 절차(V4 테이블 drop 포함).
+**후속 후보**: 멀티 선택, 투표 전 결과 숨김, 마감일, 투표 수정.
 
 ---
 
@@ -249,8 +265,9 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 - ✅ **Q&A 채택/해결됨**(완료 — `FEATURES.md` qna-accept).
 - ✅ **글쓴이(OP) 표시·글 단위 익명 별칭**(완료 — `FEATURES.md` op-alias).
 - ✅ **기수·캠퍼스 스코프 필터·라운지**(완료 — `FEATURES.md` cohort-campus-lounge).
-- ✅ **대댓글(1-depth 답글)**(완료·미커밋 — `FEATURES.md` nested-comments, Flyway V3).
-- 남음(§6 백로그): 리액션 확장(도움돼요/정보/공감), 모더레이션 강화(소프트삭제+휴지통·감사 로그·강제 숨김), 익명 투표/설문, 스터디/팀원 모집 게시판, 알림 확장/실시간, MM DM 연동 등. 상세는 V2 §6.
+- ✅ **대댓글(1-depth 답글)**(완료·커밋 `e3c3995` — `FEATURES.md` nested-comments, Flyway V3).
+- ✅ **익명 투표/설문**(완료·미커밋 — `FEATURES.md` poll, Flyway V4).
+- 남음(§6 백로그): 리액션 확장(도움돼요/정보/공감), 모더레이션 강화(소프트삭제+휴지통·감사 로그·강제 숨김), 읽음 표시/안 읽은 새 글, 알림 확장/실시간, MM DM 연동 등. (스터디/팀원 모집은 익명 보드 특성상 제외.) 상세는 V2 §6.
 
 ---
 
@@ -281,7 +298,7 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 5. **계정 휴면/탈퇴 시** 해당 계정의 기존 토큰은 즉시 거부됨(H-NEW-2, 의도된 동작). **추가로 휴면/탈퇴 시 해당 유저의 Refresh Token 전체를 DB에서 삭제**하므로 재발급도 불가(완전 무효화).
 6. **헬스체크(Phase D)**: `GET /actuator/health`는 **인증 없이 공개**(LB/오케스트레이터 프로브용). 상세 컴포넌트는 인증 시에만 노출. `liveness`/`readiness` 프로브는 `/actuator/health/{liveness,readiness}`.
 7. ✅ **스키마 마이그레이션은 Flyway가 자동 처리(M-NEW-7)** — 더 이상 배포 전 수동 DDL 불필요. dev/prod 기동 시 `classpath:db/migration`의 `V*__*.sql`을 적용하고 `ddl-auto: validate`로 재검증한다. 마이그레이션 추가는 `backend/src/main/resources/db/migration/V{N}__...sql`. (기존 수동 스크립트는 `V1__baseline.sql`에 흡수·삭제 — `backend/db/README.md` 참고.)
-   - 현 스키마: `posts.reviewed`, `post_views`, `refresh_tokens`는 V1 베이스라인 / `posts.accepted_comment_id`는 **V2** / `comments.parent_id`(+index)는 **V3**.
+   - 현 스키마: `posts.reviewed`, `post_views`, `refresh_tokens`는 V1 베이스라인 / `posts.accepted_comment_id`는 **V2** / `comments.parent_id`(+index)는 **V3** / `poll_options`·`poll_votes`는 **V4**(수기 DDL — 엔티티와 컬럼/타입 일치, 실 MySQL `validate` 최종 확인 권장).
    - 조회수 동작: 작성자 본인 조회 미집계 + 동일 유저 24h 1회 집계.
    - ⚠️ 기존 prod가 V1보다 뒤처졌다면(누락 테이블 존재) baseline 전 1회 전환 작업 필요 — `backend/db/README.md` 「기존 prod 전환」.
 8. **토큰 수명 변경**: Access Token이 **24h → 30m**로 단축됨. 프론트는 401 시 `/api/auth/refresh`로 자동 재발급(`api/client.js`)하므로 사용자 체감 영향 없음. `refresh_tokens` 테이블은 Flyway V1이 생성하므로 별도 수동 작업 불필요(7번).

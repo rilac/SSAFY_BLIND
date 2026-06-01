@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, ThumbsUp, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept]
+import { ArrowLeft, ThumbsUp, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2, BarChart3, Check } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll]
 import api from '../api/client';
 import ReportModal from '../components/ReportModal';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -187,6 +187,22 @@ export default function PostDetailPage() {
   };
   // [/FEATURE:nested-comments]
 
+  // [FEATURE:poll] 익명 투표 — 토글(같은 보기 재클릭=취소). 서버가 집계만 반환(누가 골랐는지는 미노출).
+  const [voteLoading, setVoteLoading] = useState(false);
+  const handleVote = async (optionId) => {
+    if (voteLoading) return;
+    setVoteLoading(true);
+    try {
+      const res = await api.post(`/posts/${id}/poll/vote`, { optionId });
+      setPost((prev) => ({ ...prev, poll: res.data }));
+    } catch (e) {
+      setNotice({ title: '투표 실패', message: e.response?.data?.message || '투표에 실패했습니다.' });
+    } finally {
+      setVoteLoading(false);
+    }
+  };
+  // [/FEATURE:poll]
+
   const backBtn = (
     <button
       onClick={() => navigate('/feed')}
@@ -359,6 +375,48 @@ export default function PostDetailPage() {
             <Markdown className="text-sm leading-relaxed mb-6">{post.content}</Markdown>
           </Suspense>
           {/* [/FEATURE:markdown-rendering] */}
+
+          {/* [FEATURE:poll] 익명 투표 — 보기별 막대(퍼센트)·집계, 클릭으로 투표/변경/취소 */}
+          {post.poll && (
+            <div className="mb-6 border border-border p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-sm font-mono flex items-center gap-1.5">
+                  <BarChart3 size={14} /> 투표
+                </span>
+                <span className="text-xs font-mono text-muted-foreground">{post.poll.totalVotes}표</span>
+              </div>
+              <div className="space-y-2">
+                {post.poll.options.map((opt) => {
+                  const pct = post.poll.totalVotes > 0 ? Math.round((opt.voteCount / post.poll.totalVotes) * 100) : 0;
+                  const mine = post.poll.myOptionId === opt.id;
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => handleVote(opt.id)}
+                      disabled={voteLoading}
+                      className={`relative w-full text-left border px-3 py-2 overflow-hidden transition-colors disabled:opacity-60 ${
+                        mine ? 'border-primary' : 'border-border hover:border-primary'
+                      }`}
+                    >
+                      <div
+                        className={`absolute inset-y-0 left-0 ${mine ? 'bg-primary/20' : 'bg-muted'}`}
+                        style={{ width: `${pct}%` }}
+                      />
+                      <div className="relative flex items-center justify-between text-sm font-mono">
+                        <span className="flex items-center gap-1.5">
+                          {mine && <Check size={12} className="text-primary" />}
+                          {opt.content}
+                        </span>
+                        <span className="text-muted-foreground text-xs">{pct}% · {opt.voteCount}</span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              <p className="text-[10px] font-mono text-muted-foreground mt-2">익명 투표 · 보기를 다시 누르면 취소</p>
+            </div>
+          )}
+          {/* [/FEATURE:poll] */}
 
           <div className="flex items-center gap-2 pt-4 border-t border-border">
             <button

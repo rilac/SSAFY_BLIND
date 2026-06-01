@@ -2,17 +2,33 @@ import { useState } from 'react';
 import { POST_CATEGORIES, CATEGORY_LABELS } from '../lib/categories';
 
 // 새 글 작성 / 수정 공용 폼 (카테고리 · 제목 · 내용)
-export default function PostForm({ initialValues, submitLabel, submitting, error, onSubmit, onCancel }) {
+export default function PostForm({ initialValues, submitLabel, submitting, error, onSubmit, onCancel, allowPoll }) {
   const [category, setCategory] = useState(initialValues.category);
   const [title, setTitle] = useState(initialValues.title);
   const [content, setContent] = useState(initialValues.content);
 
-  const isValid = category && title.trim() && content.trim();
+  // [FEATURE:poll] 작성 시에만 노출(allowPoll). 익명 투표 토글 + 보기 입력(2~8개)
+  const [pollEnabled, setPollEnabled] = useState(false);
+  const [pollOptions, setPollOptions] = useState(['', '']);
+  const validPollOptions = pollOptions.map((o) => o.trim()).filter(Boolean);
+  const pollValid = !pollEnabled || validPollOptions.length >= 2;
+  const updatePollOption = (i, v) => setPollOptions((prev) => prev.map((o, idx) => (idx === i ? v : o)));
+  const addPollOption = () => setPollOptions((prev) => (prev.length < 8 ? [...prev, ''] : prev));
+  const removePollOption = (i) => setPollOptions((prev) => (prev.length > 2 ? prev.filter((_, idx) => idx !== i) : prev));
+  // [/FEATURE:poll]
+
+  const isValid = category && title.trim() && content.trim() && pollValid; // pollValid: [FEATURE:poll]
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!isValid) return;
-    onSubmit({ category, title: title.trim(), content: content.trim() });
+    const payload = { category, title: title.trim(), content: content.trim() };
+    // [FEATURE:poll] 투표 첨부 시 보기 배열 포함(공백 제거 후 2개 이상일 때만)
+    if (allowPoll && pollEnabled && validPollOptions.length >= 2) {
+      payload.pollOptions = validPollOptions;
+    }
+    // [/FEATURE:poll]
+    onSubmit(payload);
   };
 
   return (
@@ -70,6 +86,53 @@ export default function PostForm({ initialValues, submitLabel, submitting, error
           required
         />
       </div>
+
+      {/* [FEATURE:poll] 익명 투표(작성 시에만 노출) */}
+      {allowPoll && (
+        <div>
+          <label className="flex items-center gap-2 text-sm font-mono mb-3 cursor-pointer w-fit">
+            <input
+              type="checkbox"
+              checked={pollEnabled}
+              onChange={(e) => setPollEnabled(e.target.checked)}
+              className="accent-primary"
+            />
+            익명 투표 추가
+          </label>
+          {pollEnabled && (
+            <div className="space-y-2 border border-border p-4">
+              <p className="text-xs text-muted-foreground font-mono mb-1">보기 2~8개 · 익명으로 집계됩니다</p>
+              {pollOptions.map((opt, i) => (
+                <div key={i} className="flex gap-2">
+                  <input
+                    type="text"
+                    value={opt}
+                    onChange={(e) => updatePollOption(i, e.target.value)}
+                    maxLength={100}
+                    placeholder={`보기 ${i + 1}`}
+                    className="flex-1 h-10 px-3 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+                  />
+                  {pollOptions.length > 2 && (
+                    <button
+                      type="button"
+                      onClick={() => removePollOption(i)}
+                      className="px-3 h-10 border border-border text-muted-foreground hover:border-destructive hover:text-destructive font-mono text-xs transition-colors"
+                    >
+                      삭제
+                    </button>
+                  )}
+                </div>
+              ))}
+              {pollOptions.length < 8 && (
+                <button type="button" onClick={addPollOption} className="text-xs font-mono text-primary hover:underline">
+                  + 보기 추가
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {/* [/FEATURE:poll] */}
 
       {error && <p className="text-sm text-destructive text-center font-mono">{error}</p>}
 

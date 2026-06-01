@@ -41,6 +41,7 @@ public class PostService {
     private final NotificationRepository notificationRepository; // C-NEW-1: 삭제 시 알림 정리
     private final PostViewRepository postViewRepository;   // M-NEW-5: 조회수 중복 제거 이력
     private final NotificationService notificationService; // 좋아요 알림
+    private final PollService pollService;                 // [FEATURE:poll] 익명 투표
 
     // M-NEW-5: 동일 유저의 재조회를 같은 글에 대해 이 시간 내에는 1회만 카운트.
     private static final long VIEW_DEDUP_HOURS = 24;
@@ -61,8 +62,12 @@ public class PostService {
                 .build();
 
         Post saved = postRepository.save(post);
+        // [FEATURE:poll] 작성 시 투표 보기 첨부(있으면). 응답에 갓 생성된 투표(0표) 포함.
+        pollService.createOptions(saved, request.getPollOptions());
+        PollResponse poll = pollService.buildResults(saved.getId(), userId);
+        // [/FEATURE:poll]
         // 본인 글 isMine=true, 방금 작성 — isLiked/isBookmarked=false, likeCount=0
-        return PostResponse.of(saved, userId, false, 0L, false, author);
+        return PostResponse.of(saved, userId, false, 0L, false, author, poll);
     }
 
     /**
@@ -92,8 +97,9 @@ public class PostService {
         boolean isLiked = postLikeRepository.existsByPostIdAndUserId(postId, currentUserId);
         long likeCount = postLikeRepository.countByPostId(postId);
         boolean isBookmarked = bookmarkRepository.existsByPostIdAndUserId(postId, currentUserId);
+        PollResponse poll = pollService.buildResults(postId, currentUserId); // [FEATURE:poll]
 
-        return PostResponse.of(post, currentUserId, isLiked, likeCount, isBookmarked, post.getAuthor(), viewCount);
+        return PostResponse.of(post, currentUserId, isLiked, likeCount, isBookmarked, post.getAuthor(), viewCount, poll);
     }
 
     /**
@@ -166,6 +172,7 @@ public class PostService {
         Set<Long> likedSet = new HashSet<>();
         Set<Long> bookmarkedSet = new HashSet<>();
         Map<Long, User> authorMap = new HashMap<>();
+        Set<Long> pollPostIds = new HashSet<>(); // [FEATURE:poll] 투표 있는 글 id
         if (!postIds.isEmpty()) {
             commentRepository.countByPostIds(postIds)
                     .forEach(row -> commentCountMap.put((Long) row[0], (Long) row[1]));
@@ -173,6 +180,7 @@ public class PostService {
                     .forEach(row -> likeCountMap.put((Long) row[0], (Long) row[1]));
             likedSet.addAll(postLikeRepository.findLikedPostIds(postIds, currentUserId));
             bookmarkedSet.addAll(bookmarkRepository.findBookmarkedPostIds(postIds, currentUserId));
+            pollPostIds.addAll(pollService.hasPollPostIds(postIds)); // [FEATURE:poll]
 
             List<Long> authorIds = posts.stream()
                     .map(p -> p.getAuthor().getId())
@@ -189,7 +197,8 @@ public class PostService {
                     boolean isLiked = likedSet.contains(pid);
                     boolean isBookmarked = bookmarkedSet.contains(pid);
                     User author = authorMap.get(post.getAuthor().getId());
-                    return PostListResponse.of(post, commentCount, currentUserId, isLiked, likeCount, isBookmarked, author);
+                    return PostListResponse.of(post, commentCount, currentUserId, isLiked, likeCount, isBookmarked,
+                            author, pollPostIds.contains(pid)); // [FEATURE:poll] hasPoll
                 })
                 .collect(Collectors.toList());
 
@@ -217,6 +226,7 @@ public class PostService {
         postLikeRepository.deleteByPostId(postId);
         bookmarkRepository.deleteByPostId(postId);
         postViewRepository.deleteByPostId(postId); // M-NEW-5: 조회 이력도 post_id FK → 함께 정리
+        pollService.deleteForPost(postId); // [FEATURE:poll] 투표 표·보기도 post_id FK → 함께 정리
         // 알림은 FK는 아니지만 죽은 링크가 남으므로 함께 정리(M-NEW-3).
         notificationRepository.deleteByPostId(postId);
 
@@ -241,7 +251,8 @@ public class PostService {
         boolean isLiked = postLikeRepository.existsByPostIdAndUserId(postId, userId);
         long likeCount = postLikeRepository.countByPostId(postId);
         boolean isBookmarked = bookmarkRepository.existsByPostIdAndUserId(postId, userId);
-        return PostResponse.of(post, userId, isLiked, likeCount, isBookmarked, post.getAuthor());
+        PollResponse poll = pollService.buildResults(postId, userId); // [FEATURE:poll]
+        return PostResponse.of(post, userId, isLiked, likeCount, isBookmarked, post.getAuthor(), poll);
     }
 
     /**

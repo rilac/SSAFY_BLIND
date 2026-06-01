@@ -42,6 +42,7 @@ export default function PostCreatePage() {
           error={error}
           onSubmit={handleCreate}
           onCancel={() => navigate('/feed')}
+          allowPoll /* [FEATURE:poll] 투표는 작성 시에만 첨부(수정 페이지에는 미전달) */
         />
       </div>
     </div>

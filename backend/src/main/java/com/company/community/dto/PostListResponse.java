@@ -41,9 +41,15 @@ public class PostListResponse {
     private boolean solved;
     // [/FEATURE:qna-accept]
 
+    // [FEATURE:poll] 투표 포함 여부 — 피드 카드 "투표" 배지용. hasPoll은 호출부에서 배치 판별해 전달.
+    @JsonProperty("hasPoll")
+    private boolean hasPoll;
+    // [/FEATURE:poll]
+
     // ★ 가명(닉네임·기수·지역)만 노출. author는 호출부에서 배치 조회한 작성자 User.
     public static PostListResponse of(Post post, long commentCount, Long currentUserId,
-                                      boolean isLiked, long likeCount, boolean isBookmarked, User author) {
+                                      boolean isLiked, long likeCount, boolean isBookmarked, User author,
+                                      boolean hasPoll) {
         return new PostListResponse(
                 post.getId(),
                 post.getCategory(),
@@ -56,7 +62,8 @@ public class PostListResponse {
                 isLiked,
                 likeCount,
                 isBookmarked,
-                post.getAcceptedCommentId() != null // [FEATURE:qna-accept] solved
+                post.getAcceptedCommentId() != null, // [FEATURE:qna-accept] solved
+                hasPoll // [FEATURE:poll]
         );
     }
 }

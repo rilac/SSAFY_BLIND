@@ -64,6 +64,9 @@ class PostServiceTest {
     @Mock
     private NotificationService notificationService;
 
+    @Mock
+    private PollService pollService; // [FEATURE:poll]
+
     @InjectMocks
     private PostService postService;
 

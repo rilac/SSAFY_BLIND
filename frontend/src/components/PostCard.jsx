@@ -1,4 +1,4 @@
-import { Flag, Eye, ThumbsUp, MessageSquare, Bookmark, CheckCircle2 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept]
+import { Flag, Eye, ThumbsUp, MessageSquare, Bookmark, CheckCircle2, BarChart3 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3: [FEATURE:poll]
 import { formatTimestamp, formatNumber } from '../lib/format';
 import { categoryLabel } from '../lib/categories';
 
@@ -26,6 +26,13 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
             </span>
           )}
           {/* [/FEATURE:qna-accept] */}
+          {/* [FEATURE:poll] 투표 배지 — 투표가 첨부된 글 */}
+          {post.hasPoll && (
+            <span className="flex items-center gap-1 text-primary">
+              <BarChart3 size={12} /> 투표
+            </span>
+          )}
+          {/* [/FEATURE:poll] */}
         </div>
 
         <button

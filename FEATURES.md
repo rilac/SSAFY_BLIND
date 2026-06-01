@@ -153,3 +153,37 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 3. DB: `drop index idx_comments_parent_id on comments; alter table comments drop column parent_id;` (V3 적용 환경) — 미적용이면 불필요.
 
 **미적용(후속 후보)**: 답글 삭제 시 soft-delete placeholder(타인 답글 보존), 답글 N개 접기/펼치기, REPLY 알림 타입 분리(enum 마이그레이션), 답글에 멘션.
+
+---
+
+## poll — 익명 투표/설문 (2026-06-02)
+
+§6-5 B ☆. 게시글에 선택적 익명 투표 첨부("어느 프레임워크?" 등). **익명 보드 특성에 적합**(모집 글은 신원 필요 → 부적합, 투표는 집계만 노출). **백엔드 + 프론트엔드**, Flyway **V4**.
+
+**범위/동작**
+- 데이터: `poll_options`(post_id, content, sort_order) + `poll_votes`(post_id, option_id[Long, FK 없음], user_id, **unique(post_id,user_id)**). 보기가 2개 이상이면 그 글은 "투표 글". **Flyway V4**.
+- **익명성**: 표는 `user_id`로 **1인 1표**를 강제하되, 노출은 **보기별 집계(count)만** — 누가 무엇을 골랐는지는 응답에 포함하지 않음.
+- 작성: `PostCreateRequest.pollOptions`(선택, `List<String>`). `PollService.createOptions`가 공백 제거 후 **2~8개·각 100자** 검증(위반 시 400 InvalidState, 작성 트랜잭션 롤백). 빈 목록이면 투표 미첨부.
+- 투표: `POST /api/posts/{postId}/poll/vote` `{optionId}` — **토글**: 처음=신규, 다른 보기=변경(changeOption), **같은 보기 재클릭=취소(delete)**. 동시 첫 투표 경합은 유니크 제약으로 1회만(`DataIntegrityViolationException` 흡수).
+- 응답: `PostResponse.poll`(options[{id,content,voteCount}] + totalVotes + myOptionId; 투표 없으면 **null**). `PostListResponse.hasPoll`(피드 배지용, 배치 판별).
+- 삭제: 글 삭제 시 `poll_votes`·`poll_options` 정리(`PollService.deleteForPost` → `PostService.deletePost` 경로, 다른 자식 정리와 동일하게 글 삭제 전).
+- UI: `PostForm` 투표 토글 + 보기 입력(2~8, **작성 시에만** `allowPoll`), `PostDetailPage` 보기별 막대(퍼센트)+집계+내 선택 강조+클릭 투표/취소, `PostCard` "투표" 배지.
+
+**알려진 동작/한계**: ① 단일 선택만(멀티 선택 미지원). ② 결과 **상시 공개**(투표 전 숨김 아님). ③ 마감일/마감 상태 없음. ④ 수정(updatePost)으로는 투표 변경 불가(작성 시에만 첨부, 응답엔 기존 투표 표시). ⑤ V4 DDL은 베이스라인처럼 Hibernate 생성이 아닌 **수기 작성** — 엔티티 컬럼/타입(`bigint`/`varchar(255)`/`integer`/`datetime(6)`)과 일치하도록 맞췄고 H2 테스트는 엔티티 기반(create-drop)이라 무관하나, **실 MySQL 기동 시 `validate` 통과 최종 확인 권장**.
+
+**마커 위치 (`[FEATURE:poll]`)**
+- (신규) 백엔드: `domain/PollOption.java`·`domain/PollVote.java`, `repository/PollOptionRepository.java`·`repository/PollVoteRepository.java`, `dto/PollResponse.java`·`dto/PollVoteRequest.java`, `service/PollService.java`, `controller/PollController.java`, `resources/db/migration/V4__add_poll.sql`, `test/service/PollServiceTest.java` — 파일 전체.
+- 백엔드(수정): `dto/PostCreateRequest.java`(`pollOptions`), `dto/PostResponse.java`(`poll` 필드+factory), `dto/PostListResponse.java`(`hasPoll`), `service/PostService.java`(PollService 주입 + createPost/getPost/updatePost/getAllPosts/deletePost 연결). `test/service/PostServiceTest.java`(@Mock PollService), `test/service/PostDeletionIntegrationTest.java`(실 PollService 구성).
+- (신규) 프론트: 없음(기존 컴포넌트에 블록 추가). 수정: `components/PostForm.jsx`(투표 작성 UI+allowPoll), `pages/PostCreatePage.jsx`(allowPoll 전달), `pages/PostDetailPage.jsx`(투표 렌더+handleVote), `components/PostCard.jsx`(투표 배지).
+
+**롤백 절차**
+1. `[FEATURE:poll]` 마커 블록 제거.
+   - `PostResponse`: `poll` 필드 + factory 2개의 `poll` 파라미터 제거 → 기존 시그니처 환원. 호출부(`PostService` createPost/getPost/updatePost) 인자 환원.
+   - `PostListResponse`: `hasPoll` 필드 + factory 파라미터 제거. `PostService.getAllPosts`의 `pollPostIds`·`hasPoll` 인자 환원.
+   - `PostService`: `PollService` 필드, createPost의 createOptions/buildResults, getPost/updatePost의 buildResults, deletePost의 deleteForPost 제거.
+   - `PostCreateRequest.pollOptions` 제거. 테스트: `PostServiceTest`의 `@Mock PollService` 제거, `PostDeletionIntegrationTest`의 PollService 구성·인자 환원.
+   - 프론트 4개 파일의 마커 블록 제거(PostForm 투표 UI/state, PostCreatePage allowPoll, PostDetailPage 투표 렌더/handleVote/import, PostCard 배지/import).
+2. 신규 파일 삭제(위 "신규" 목록 + V4 sql + PollServiceTest).
+3. DB: `drop table poll_votes; drop table poll_options;` (V4 적용 환경).
+
+**미적용(후속 후보)**: 멀티 선택, 투표 전 결과 숨김, 마감일/자동 마감, 투표 수정(편집), 투표 결과 글에 고정.

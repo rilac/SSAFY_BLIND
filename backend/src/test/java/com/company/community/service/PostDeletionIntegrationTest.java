@@ -13,6 +13,8 @@ import com.company.community.domain.UserStatus;
 import com.company.community.repository.BookmarkRepository;
 import com.company.community.repository.CommentRepository;
 import com.company.community.repository.NotificationRepository;
+import com.company.community.repository.PollOptionRepository;
+import com.company.community.repository.PollVoteRepository;
 import com.company.community.repository.PostLikeRepository;
 import com.company.community.repository.PostRepository;
 import com.company.community.repository.PostViewRepository;
@@ -57,6 +59,8 @@ class PostDeletionIntegrationTest {
     @Autowired private ReportRepository reportRepository;
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private PostViewRepository postViewRepository;
+    @Autowired private PollOptionRepository pollOptionRepository; // [FEATURE:poll]
+    @Autowired private PollVoteRepository pollVoteRepository;     // [FEATURE:poll]
     @Autowired private TestEntityManager em;
 
     private PostService postService;
@@ -64,10 +68,13 @@ class PostDeletionIntegrationTest {
     @BeforeEach
     void setUp() {
         // 좋아요 알림(NotificationService)은 삭제 경로와 무관 → 목으로 대체.
+        // 투표 정리(PollService)는 실제 리포지토리로 구성해 삭제 경로를 프로덕션과 동일하게 검증.
+        PollService pollService = new PollService(
+                pollOptionRepository, pollVoteRepository, postRepository, userRepository);
         postService = new PostService(
                 postRepository, userRepository, postLikeRepository, commentRepository,
                 bookmarkRepository, reportRepository, notificationRepository, postViewRepository,
-                Mockito.mock(NotificationService.class));
+                Mockito.mock(NotificationService.class), pollService);
     }
 
     @Test
