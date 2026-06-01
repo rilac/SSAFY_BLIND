@@ -3,10 +3,11 @@
 사내 블라인드형 익명 커뮤니티(Spring Boot + React)의 1차/2차 리뷰 반영 작업 기록입니다.
 분석/계획 문서는 [MoreDevelopments.md](./MoreDevelopments.md)(1차) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md)(2차)이며, 본 문서는 **무엇을 실제로 구현했는지**를 한곳에 모은 진행 현황입니다.
 
-- 최종 업데이트: 2026-06-01
-- Git: **Phase A~D 커밋·푸시 완료**(`origin/main` — `83df359` 저장소 위생 + `9a3bd3e` Phase A~D)
-- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅** 완료 · **Phase D 🔄 Flyway 제외 완료**(M-NEW-5 조회수·삭제 통합 테스트·관측성) → **남은 것: Phase D의 M-NEW-7(Flyway)·테스트 폭 + Phase E/§6 기능**
-- 🗓️ **다음 예정(2026-06-02)**: Access/Refresh 토큰 분리 — 짧은 Access(30m, stateless) + DB 저장 Refresh(긴 수명) + 만료 정리 스케줄러. *(설계만 문서화, 코드 미반영 — 아래 "다음 예정" 및 V2 설계 섹션)*
+- 최종 업데이트: 2026-06-02
+- Git: **Phase A~D 커밋·푸시 완료**(`origin/main` — `83df359` 저장소 위생 + `9a3bd3e` Phase A~D). **Access/Refresh 토큰 분리 + Flyway(M-NEW-7)는 구현 완료·미커밋**(로컬 작업트리 — 커밋 대기).
+- 진행 단계: **Phase 0 ✅ · A ✅ · B ✅ · C ✅ · D ✅ 완료**(M-NEW-5·삭제 통합·관측성 + **M-NEW-7 Flyway 완료**) → **남은 것: 테스트 폭 보강 + Phase E/§6 기능**
+- ✅ **Access/Refresh 토큰 분리 구현 완료(2026-06-02)**: 짧은 Access(30m, stateless) + DB 저장 Refresh(14d, `refresh_tokens`) + `/api/auth/refresh` 회전 재발급 + 만료 정리 스케줄러. 검증: backend `./gradlew.bat test` BUILD SUCCESSFUL, frontend `npm run build` 성공. *(아래 "✅ Refresh Token 도입" 섹션)*
+- ✅ **M-NEW-7 Flyway 도입 완료(2026-06-02)**: Hibernate가 생성한 `V1__baseline.sql`(=validate와 정확히 일치) + `baseline-on-migrate`로 기존/신규 DB 모두 안전 처리. dev/prod 모두 Flyway ON·`ddl-auto: validate`, 테스트(H2)는 Flyway OFF. **배포 전 수동 DDL 폐기.** *(아래 "✅ M-NEW-7 Flyway" 섹션)*
 - 운영 완성도 추이: 1차 65~70% → Phase 0 후 70~75% → Phase A·B 후 배포 가능 → Phase C 후 UX/정책 마감 → **Phase D(운영품질) 반영 중(약 88~90%)**
 - 작업 범위 원칙: **리뷰 반영 수정은 영구**(롤백 마커 없음). **기능 확장(§6)은 롤백 용이하도록 마커**(아래 [롤백 마커 규약](#롤백-마커-규약)) — Phase 0/A/B는 전부 수정이라 마커 미사용.
 
@@ -91,9 +92,50 @@
 | **삭제 통합 테스트**(C-NEW-1 회귀) | 🟡 | `@DataJpaTest`+H2 실 FK로 신고/좋아요/북마크/조회이력이 달린 글 삭제가 FK 위반 없이 성공함을 검증(단위 목으로는 못 잡던 회귀 방지) | (신규) `test/PostDeletionIntegrationTest` |
 | **관측성**(Actuator + 요청 추적) | 🟡 | `spring-boot-starter-actuator` — `/actuator/health` 공개(LB/프로브용, 상세는 인증 시), liveness/readiness 프로브 활성. `RequestIdFilter`(최우선)가 요청마다 `requestId`를 MDC·응답헤더(X-Request-Id)로 부여 + 로그 패턴 `%X{requestId}`. 전체 컨텍스트+보안 필터 체인 스모크(헬스 공개 200 / 보호 API 401) | (신규) `security/RequestIdFilter`, `test/ApplicationSmokeTest`; `build.gradle`, `application.yml`, `security/{SecurityConfig,JwtAuthFilter}` |
 
-> ⏳ **M-NEW-7 Flyway는 보류 — 대신 수동 DDL 스크립트 채택**: prod=`ddl-auto: validate`라 Flyway 베이스라인이 엔티티 스키마와 **정확히** 일치해야 기동되는데, 실 MySQL 검증 환경이 없어 손으로 쓴 베이스라인은 prod 기동 실패 위험이 크다. 따라서 **Phase C/D 스키마 델타를 명시적 SQL로 제공**(`backend/db/migration/2026-06-01_phase_c_d_schema_delta.sql`, `backend/db/README.md`) — 배포 전 수동 적용으로 안전하게 언블록. Flyway 전체 도입은 실 MySQL 베이스라인을 생성·검증 가능할 때. 테스트 폭 추가(컨트롤러 슬라이스·`CommentService` 단위)도 후속.
+> ✅ **M-NEW-7 Flyway는 2026-06-02 도입 완료**(아래 "✅ M-NEW-7 Flyway" 섹션). 베이스라인을 손으로 쓰지 않고 **Hibernate가 생성**해 `validate` 정합을 보장하는 방식으로, 보류 사유(정합 검증 리스크)를 해소했다. 기존 수동 DDL 스크립트(`backend/db/migration/*.sql`)는 `V1__baseline.sql`에 흡수·폐기. 테스트 폭 추가(컨트롤러 슬라이스·`CommentService` 단위)는 후속.
 
 **기록 문서**: `MoreDevelopments_V2.md` 상단 Phase D 섹션.
+
+---
+
+## ✅ Refresh Token 도입 — Access/Refresh 분리 (2026-06-02, 미커밋)
+
+Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구조로 구현. 단일 JWT(24h)를 **짧은 Access Token(30m, stateless) + DB 저장 Refresh Token(14d)**으로 분리.
+검증: `backend`에서 `./gradlew.bat test` **BUILD SUCCESSFUL**(신규 `RefreshTokenServiceTest` 8종 + AuthService refresh 3종 + AccountService RT 폐기 검증 포함) · `frontend`에서 `npm run build` 성공.
+
+| 항목 | 핵심 변경 | 신규/수정 파일 |
+|---|---|---|
+| **RT 엔티티/저장** | opaque 32B 난수 → **SHA-256 해시만 DB 저장**(원문 미저장). `(token_hash)` 유니크, `user_id` NOT NULL FK, `expires_at` 인덱스 | (신규) `domain/RefreshToken`, `repository/RefreshTokenRepository` |
+| **발급/검증/회전** | `RefreshTokenService` — `issue`(발급)·`findValid`(조회+만료검사)·`rotate`(**삭제 후 재발급** = 1회용 회전)·`deleteByRawToken`(단일 세션)·`deleteAllForUser`(전체 폐기)·`deleteExpired`(정리) | (신규) `service/RefreshTokenService`, `dto/TokenPair` |
+| **AT 30분 단축** | `JwtProvider` 수명을 `app.jwt.access-ttl`(기본 30m)로 외부화·단축(기존 24h 상수) | `security/JwtProvider` |
+| **쿠키 2개 분리** | `access_token`(path=`/`, maxAge=AT TTL) + `refresh_token`(path=`/api/auth`, maxAge=RT TTL). 둘 다 HttpOnly·secure(프로파일)·SameSite=Lax | `util/CookieUtils` |
+| **로그인/온보딩 발급** | 로그인 시 AT+RT 동시 발급(쿠키 2개). 온보딩(PENDING→ACTIVE)은 AT만 재발급(RT 유지) | `service/AuthService`, `controller/{Auth,Onboarding}Controller`, `dto/LoginResponse` |
+| **재발급 엔드포인트** | `POST /api/auth/refresh` — RT 쿠키 검증 → 회전 + 새 AT 발급. **H-NEW-2와 동일하게 DB 상태 재검증**(ACTIVE/PENDING만, 휴면/탈퇴 거부). 실패 시 401 + 쿠키 만료 | `controller/AuthController`, `service/AuthService`, `security/{SecurityConfig,JwtAuthFilter}`(permit/skip) |
+| **로그아웃/탈퇴/휴면 폐기** | 로그아웃=제시된 RT 삭제, 탈퇴/휴면=유저 RT 전체 삭제 → AT 자연만료(≤30m)+RT 즉시폐기 = 완전 무효화 | `controller/AuthController`, `service/AccountService`, `controller/AccountController` |
+| **만료 정리 스케줄러** | `@EnableScheduling` + `@Scheduled`(기본 매일 04:00, `app.refresh-cleanup.cron`) 벌크 DELETE. 단일 인스턴스 전제 | (신규) `scheduler/RefreshTokenCleanupScheduler`, `CommunityApplication` |
+| **프론트 인터셉터** | AT 401 → `/api/auth/refresh` 1회 호출 후 원요청 재시도, 동시 401은 단일 refresh로 큐잉(single-flight), 실패 시 로그인 | `frontend/src/api/client.js` |
+| **prod 수동 DDL** | `refresh_tokens` 생성 스크립트(prod `validate` 대비) | (신규) `backend/db/migration/2026-06-02_refresh_tokens.sql`, `backend/db/README.md` |
+
+**기록 문서**: `MoreDevelopments_V2.md`의 「Access/Refresh 토큰 분리」 섹션.
+
+---
+
+## ✅ M-NEW-7 — Flyway 스키마 마이그레이션 (2026-06-02, 미커밋)
+
+보류했던 Flyway를, **"베이스라인을 Hibernate가 생성"** 하는 방식으로 정합 리스크 없이 도입. **배포 전 수동 DDL 단계 제거.**
+검증: `backend`에서 `./gradlew.bat test` **BUILD SUCCESSFUL**(Flyway 클래스패스 존재 + 테스트(H2)는 OFF 유지 확인).
+
+| 항목 | 핵심 내용 | 파일 |
+|---|---|---|
+| **의존성** | `flyway-core` + `flyway-mysql` | `build.gradle` |
+| **V1 베이스라인** | 현 엔티티 전체 스키마(10테이블 + enum/FK/unique). **`GenerateBaselineTest`로 Spring 네이밍전략+MySQL방언 DDL을 추출**해 그대로 사용 → `validate`와 정확히 일치 보장. RT 정리용 `expires_at` 인덱스 추가 | (신규) `src/main/resources/db/migration/V1__baseline.sql`, (신규·@Disabled) `test/GenerateBaselineTest` |
+| **프로파일 설정** | dev/prod: `flyway.enabled=true` + `baseline-on-migrate=true` + `ddl-auto: validate`(dev는 update→validate 전환). 공통 기본 OFF, 테스트(H2)는 OFF(`@TestPropertySource`) | `application.yml`, `application-dev.yml`, `application-prod.yml`, `test/{ApplicationSmokeTest,PostRepositoryTest,PostDeletionIntegrationTest}` |
+| **수동 DDL 폐기** | `backend/db/migration/*.sql`(Phase C/D·refresh_tokens) 삭제 → V1에 흡수. README는 Flyway 안내·전환 절차로 교체 | `backend/db/README.md` (삭제: 두 `*.sql`) |
+
+- **동작**: 빈 DB(신규 prod) → V1 실행해 전체 생성 / 기존 DB(dev) → baseline-on-migrate가 V1을 "적용됨"으로만 기록(미실행, 스키마 보존). 이후 변경은 `V2__...`만 추가하면 dev·prod 자동 적용 + `validate` 재검증(이중 안전망).
+- **검증 권장**: dev MySQL로 `bootRun` 1회 → `flyway_schema_history` 생성·`validate` 통과 확인. (실 MySQL 기동은 사용자 환경에서 최종 확인 필요 — 베이스라인은 Hibernate 생성이라 문법·정합은 보장)
+
+**기록 문서**: `MoreDevelopments_V2.md` §3 M-NEW-7 + `backend/db/README.md`.
 
 ---
 
@@ -101,7 +143,7 @@
 
 | 항목 | 사유 | 출처 |
 |---|---|---|
-| 토큰 폐기 — **Access 단축 + Refresh DB 저장** | 탈퇴/휴면 즉시 무효화(실질적 폐기)는 H-NEW-2로 달성. **→ 🔜 2026-06-02 구현 예정**(설계 문서화 완료, 아래 "다음 예정" 참조) | Phase B |
+| ~~토큰 폐기 — **Access 단축 + Refresh DB 저장**~~ → ✅ **구현 완료(2026-06-02)** | 짧은 AT(30m) + DB 저장 RT(14d) + `/api/auth/refresh` 회전 + 만료 정리 스케줄러 도입(위 "Refresh Token 도입" 섹션). H-NEW-2 상태 재검증과 결합해 완전 무효화 | Phase B |
 | ~~**M-NEW-5/M-2** 조회수 서버단 중복제거~~ → ✅ **Phase D 완료** | 작성자 제외 + 24h dedup(`PostView`)로 서버단 정식 처리 | V2 §3 |
 | ~~삭제 **통합 테스트**(@DataJpaTest 실제 FK)~~ → ✅ **Phase D 완료** | `PostDeletionIntegrationTest`로 실 FK 회귀 검증 | V2 §8 |
 
@@ -109,19 +151,10 @@
 
 ## 🔜 남은 작업
 
-> Phase D는 Flyway 제외 완료(M-NEW-5·삭제 통합 테스트·관측성). 남은 것은 아래.
+> **Phase D 완료**(M-NEW-5·삭제 통합 테스트·관측성 + **M-NEW-7 Flyway**). **Access/Refresh 토큰 분리도 구현 완료**(미커밋, 위 섹션들). 남은 것은 아래.
 
-### 🗓️ 다음 예정 (2026-06-02) — Access/Refresh 토큰 분리 + Refresh DB 저장
-- **Access Token**: stateless JWT, **30분**, DB 미저장(HttpOnly 쿠키).
-- **Refresh Token**: **DB 저장**(`refresh_tokens`, 해시 저장), 긴 수명(예 14일), path 한정 쿠키. `/api/auth/refresh`로 AT 재발급(+회전 권장).
-- **만료 정리 스케줄러**: `@EnableScheduling` + `@Scheduled` 벌크 `DELETE`로 만료 RT 주기 정리(테이블 비대화 방지).
-- 로그아웃/탈퇴/휴면 시 RT 삭제 → H-NEW-2(요청마다 DB 상태 재검증)와 결합해 완전 무효화.
-- 동반: 프론트 axios refresh 인터셉터, `refresh_tokens` 수동 DDL(`backend/db`, prod `validate` 대비).
-- **상세 설계/체크리스트**: `MoreDevelopments_V2.md` 「(예정) Access/Refresh 토큰 분리」 섹션. *(현재는 설계 문서화만 — 코드 미반영)*
-
-### Phase D 잔여 — 운영 품질
-- **M-NEW-7 Flyway**(결정 필요): 실 MySQL로 베이스라인 생성·검증 가능한 환경에서 도입. prod=`validate`라 스키마 정합 필수.
-- 테스트 폭 추가: 컨트롤러 슬라이스(@WebMvcTest), `CommentService` 단위, 인가 케이스 확장. (삭제 통합·헬스/인가 스모크는 완료)
+### Phase D 잔여 — 테스트 폭
+- 테스트 폭 추가: 컨트롤러 슬라이스(@WebMvcTest), `CommentService` 단위, 인가 케이스 확장. (삭제 통합·헬스/인가 스모크·`RefreshTokenServiceTest`는 완료)
 
 ### Phase E / §6 — 기능 확장 (롤백 마커 적용 대상)
 - 모더레이션 강화(소프트삭제+휴지통, 감사 로그, 강제 숨김), 마크다운+코드블록, Q&A 채택, 대댓글/리액션, 기수·캠퍼스 라운지, 알림 확장/실시간, MM DM 연동 등. 상세는 V2 §6.
@@ -140,6 +173,9 @@
 | `MM_READ_TIMEOUT_MS` | `app.mattermost.read-timeout-ms` | `5000` | MM read 타임아웃 |
 | `APP_ADMIN_BOOTSTRAP_USERNAMES` | `app.admin.bootstrap-usernames` | (빈 값) | 콤마 구분 MM username, 로그인 시 ADMIN 승격 |
 | `JWT_SECRET` | `jwt.secret` | (없음, 필수) | **이제 ≥ 32바이트 필수** — 미달 시 기동 실패(fail-fast) |
+| `APP_JWT_ACCESS_TTL` | `app.jwt.access-ttl` | `30m` | Access Token 수명(JWT exp + access_token 쿠키 maxAge). Duration 표기(`30m`,`1h`) |
+| `APP_JWT_REFRESH_TTL` | `app.jwt.refresh-ttl` | `14d` | Refresh Token 수명(DB `expires_at` + refresh_token 쿠키 maxAge) |
+| `APP_REFRESH_CLEANUP_CRON` | `app.refresh-cleanup.cron` | `0 0 4 * * *` | 만료 RT 정리 스케줄러 cron(기본 매일 04:00). 단일 인스턴스 전제 |
 
 ---
 
@@ -149,12 +185,13 @@
 2. **운영 배포 시 `APP_CORS_ALLOWED_ORIGINS`에 실제 프론트 도메인**을 반드시 지정.
 3. **최초 관리자**: `APP_ADMIN_BOOTSTRAP_USERNAMES`에 MM **username**(loginId/email 아님) 지정 → 해당 계정이 로그인하면 ADMIN 승격(로그인 시점).
 4. **H-NEW-4 리포 위생 — 커밋·푸시 완료**(2026-06-01): node_modules·.idea 추적 해제 + Figma mock 제거를 `83df359`(위생) / Phase A~D 소스를 `9a3bd3e`로 분리 커밋해 `origin/main` 반영. 작업트리의 node_modules는 보존(ignore됨).
-5. **계정 휴면/탈퇴 시** 해당 계정의 기존 토큰은 즉시 거부됨(H-NEW-2, 의도된 동작).
+5. **계정 휴면/탈퇴 시** 해당 계정의 기존 토큰은 즉시 거부됨(H-NEW-2, 의도된 동작). **추가로 휴면/탈퇴 시 해당 유저의 Refresh Token 전체를 DB에서 삭제**하므로 재발급도 불가(완전 무효화).
 6. **헬스체크(Phase D)**: `GET /actuator/health`는 **인증 없이 공개**(LB/오케스트레이터 프로브용). 상세 컴포넌트는 인증 시에만 노출. `liveness`/`readiness` 프로브는 `/actuator/health/{liveness,readiness}`.
-7. 🔴 **prod 스키마 델타(배포 전 필수)**: prod는 `ddl-auto: validate`라 엔티티가 요구하는 테이블/컬럼이 **없으면 기동 실패**한다. Flyway 미도입 상태이므로 **배포 전 수동 DDL**로 반영(dev는 `update`라 자동 생성). → 스크립트·절차: **`backend/db/migration/2026-06-01_phase_c_d_schema_delta.sql`** + `backend/db/README.md`.
-   - Phase C: `posts.reviewed` 컬럼 추가(기존 `hidden` 타입과 일치).
-   - Phase D(M-NEW-5): `post_views` 테이블 신규(`(post_id,user_id)` 유니크, post_id/user_id FK).
+7. ✅ **스키마 마이그레이션은 Flyway가 자동 처리(M-NEW-7)** — 더 이상 배포 전 수동 DDL 불필요. dev/prod 기동 시 `classpath:db/migration`의 `V*__*.sql`을 적용하고 `ddl-auto: validate`로 재검증한다. 마이그레이션 추가는 `backend/src/main/resources/db/migration/V2__...sql`. (기존 수동 스크립트는 `V1__baseline.sql`에 흡수·삭제 — `backend/db/README.md` 참고.)
+   - 현 스키마: `posts.reviewed`, `post_views`, `refresh_tokens` 모두 V1 베이스라인에 포함.
    - 조회수 동작: 작성자 본인 조회 미집계 + 동일 유저 24h 1회 집계.
+   - ⚠️ 기존 prod가 V1보다 뒤처졌다면(누락 테이블 존재) baseline 전 1회 전환 작업 필요 — `backend/db/README.md` 「기존 prod 전환」.
+8. **토큰 수명 변경**: Access Token이 **24h → 30m**로 단축됨. 프론트는 401 시 `/api/auth/refresh`로 자동 재발급(`api/client.js`)하므로 사용자 체감 영향 없음. `refresh_tokens` 테이블은 Flyway V1이 생성하므로 별도 수동 작업 불필요(7번).
 
 ---
 

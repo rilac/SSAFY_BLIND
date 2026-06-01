@@ -2,6 +2,10 @@
 spring:
   profiles:
     active: ${SPRING_PROFILES_ACTIVE:dev}
+  # M-NEW-7: Flyway 기본 OFF — 테스트(H2)는 베이스라인이 MySQL 전용이므로 비활성 유지.
+  # dev/prod 프로파일에서 true로 켜고 baseline-on-migrate로 기존 DB도 안전 처리.
+  flyway:
+    enabled: false
 
 mattermost:
   base-url: ${MM_BASE_URL}

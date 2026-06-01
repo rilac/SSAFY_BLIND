@@ -6,11 +6,18 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: update
+      # M-NEW-7: Flyway가 스키마를 관리하므로 dev도 validate로 전환(기존 update 자동생성 중단).
+      # → 엔티티 변경 시 V*__ 마이그레이션을 빠뜨리면 dev 기동 단계에서 바로 잡힌다(prod와 동일 동작).
+      ddl-auto: validate
     show-sql: true
     properties:
       hibernate:
         format_sql: true
+  # M-NEW-7: Flyway ON. baseline-on-migrate=true → 기존 dev DB는 V1을 "적용됨"으로만 표시(미실행),
+  # 빈 DB는 V1부터 생성. 이후 변경은 V2__... 로.
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
 
 app:
   cookie:

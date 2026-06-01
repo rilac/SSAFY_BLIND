@@ -14,6 +14,12 @@ spring:
   h2:
     console:
       enabled: false
+  # M-NEW-7: Flyway가 스키마를 적용한 뒤 Hibernate가 validate로 재검증(이중 안전망).
+  # baseline-on-migrate=true → 이미 V1 수준인 기존 prod DB는 baseline만 기록(미실행),
+  # 빈 DB(신규 prod)는 V1부터 생성. (기존 prod가 V1보다 뒤처졌다면 backend/db/README.md 전환 절차 선행.)
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
 
 # (#5) prod 환경에서는 HTTPS이므로 secure=true
 app:

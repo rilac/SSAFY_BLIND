@@ -45,6 +45,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
+        "spring.flyway.enabled=false", // M-NEW-7: 베이스라인은 MySQL 전용 — H2 테스트에선 Flyway 미실행
 })
 class PostDeletionIntegrationTest {
 

@@ -1,33 +1,33 @@
-# DB 수동 마이그레이션 (Flyway 미도입)
+# DB 마이그레이션 — ✅ Flyway로 전환됨 (M-NEW-7)
 
-운영(prod) 프로파일은 `spring.jpa.hibernate.ddl-auto=validate`라 **엔티티가 요구하는
-테이블/컬럼이 DB에 미리 있어야** 애플리케이션이 기동됩니다(없으면 검증 실패로 부팅 실패).
-아직 Flyway/Liquibase를 도입하지 않았으므로(M-NEW-7 보류), 스키마 변경은 이 디렉터리의
-SQL 스크립트를 **배포 전 수동으로** 적용합니다. dev 프로파일은 `ddl-auto=update`라 자동 반영됩니다.
+> **이 디렉터리(`backend/db`)의 수동 DDL 방식은 폐기되었습니다.**
+> 스키마는 이제 **Flyway**가 관리합니다 → 마이그레이션 위치: **`backend/src/main/resources/db/migration/`**
+> (기존 수동 델타 스크립트 `2026-06-01_phase_c_d_schema_delta.sql`·`2026-06-02_refresh_tokens.sql`의 내용은
+> `V1__baseline.sql`에 모두 흡수되어 삭제되었습니다.)
 
-## 적용 방법
+## 동작 방식
 
-해당 변경이 포함된 앱 버전을 배포하기 **전에**, 파일명 날짜 순서대로 운영 DB에 1회 적용:
+- **dev / prod 모두** `spring.flyway.enabled=true` + `spring.flyway.baseline-on-migrate=true`.
+- 기동 시 Flyway가 `classpath:db/migration`의 `V*__*.sql`을 순서대로 적용한 뒤, Hibernate가 `ddl-auto: validate`로 스키마를 재검증한다(이중 안전망). **더 이상 배포 전 수동 DDL이 필요 없다.**
+- 테스트(H2)는 베이스라인이 MySQL 전용이라 `spring.flyway.enabled=false` + `ddl-auto: create-drop` 유지.
 
-```bash
-mysql -h "$DB_HOST" -u "$DB_USERNAME" -p "$DB_NAME" < 2026-06-01_phase_c_d_schema_delta.sql
-```
+| 상황 | Flyway 동작 |
+|---|---|
+| 빈 DB(신규 prod) | `V1__baseline.sql`부터 실행해 전체 스키마 생성 |
+| 기존 DB(로컬 dev 등, V1 수준) | `baseline-on-migrate`가 V1을 "적용됨"으로만 기록(미실행) → 기존 스키마 보존. 이후 `V2__...`만 적용 |
 
-- 스크립트는 **멱등이 아닙니다**(MySQL은 `ADD COLUMN IF NOT EXISTS` 미지원). 이미 적용했다면 재실행하지 마세요.
-- 적용 후 앱을 기동해 `validate`가 통과하는지 확인하세요.
+## 스키마 변경 절차 (앞으로)
 
-## 스크립트 목록
+1. 엔티티 수정.
+2. `backend/src/main/resources/db/migration/V2__설명.sql`(다음 번호) 추가 — 변경분 DDL만.
+3. 끝. dev/prod 모두 기동 시 Flyway가 자동 적용하고 `validate`가 정합을 확인한다.
 
-| 파일 | 내용 | 출처 |
-|------|------|------|
-| `migration/2026-06-01_phase_c_d_schema_delta.sql` | `posts.reviewed` 컬럼 추가, `post_views` 테이블 생성 | Phase C(§1-1), Phase D(M-NEW-5) |
+> 베이스라인 DDL은 손으로 쓰지 않고 **Hibernate가 생성**했다(=`validate`와 정확히 일치 보장).
+> 스키마 전체를 다시 뽑아보려면 `GenerateBaselineTest`(@Disabled)를 수동 실행 → `build/generated-baseline.sql` 참고.
 
-## 향후 — Flyway 전환(M-NEW-7)
+## ⚠️ 기존 prod가 V1보다 "뒤처진" 경우 (1회 전환)
 
-실 MySQL에서 현재 스키마를 덤프해 V1 베이스라인을 만들고 검증할 수 있는 환경이 갖춰지면
-Flyway로 이관 권장:
+이미 운영 중인 DB가 최신 스키마(예: `refresh_tokens`, `post_views`, `posts.reviewed`)를 **아직 갖고 있지 않다면**, `baseline-on-migrate`가 V1을 미실행으로 건너뛰므로 누락 테이블이 생기지 않는다. 전환 시 **둘 중 하나**:
 
-1. `flyway-core` + `flyway-mysql` 의존성 추가.
-2. 운영 스키마 덤프 → `src/main/resources/db/migration/V1__baseline.sql`(엔티티와 정확히 일치해야 함).
-3. 이후 변경은 `V2__...sql`로. 기존 운영 DB에는 `spring.flyway.baseline-on-migrate=true`.
-4. 테스트는 H2(MySQL 전용 SQL과 불일치)이므로 `spring.flyway.enabled=false`로 분리.
+- (권장) 빈 DB로 새로 시작 → Flyway가 V1 전체를 생성.
+- 기존 데이터 유지가 필요하면, **baseline 직전에** 누락분만 수동 적용해 V1 수준으로 맞춘 뒤 배포(이때만 1회 수동). 이후로는 전부 Flyway가 담당.

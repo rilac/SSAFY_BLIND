@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.password=",
         "spring.jpa.hibernate.ddl-auto=create-drop",
         "spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.H2Dialect",
+        "spring.flyway.enabled=false", // M-NEW-7: 베이스라인은 MySQL 전용 — H2 스모크에선 Flyway 미실행
         "jwt.secret=test-only-secret-key-at-least-32-bytes-long-0123456789",
         "mattermost.base-url=http://localhost:9999",
         "app.cookie.secure=false",
