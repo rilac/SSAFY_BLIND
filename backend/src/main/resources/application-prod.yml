@@ -24,7 +24,8 @@ spring:
 # (#5) prod 환경에서는 HTTPS이므로 secure=true
 app:
   cookie:
-    secure: true
+    # 기본 true(HTTPS 전용). HTTP(IP)로 임시 기동할 땐 APP_COOKIE_SECURE=false 로 끌 수 있다.
+    secure: ${APP_COOKIE_SECURE:true}
 
 logging:
   level:
