@@ -90,7 +90,7 @@ export default function SettingsPage() {
         >
           <div className="flex items-center gap-2">
             <Logo size={20} className="text-primary" />
-            <h1 className="text-xl font-mono tracking-tight">SSAFY_BLIND</h1>
+            <h1 className="text-xl font-mono tracking-tight">SSAFY_SOOP</h1>
           </div>
           <p className="text-xs font-mono text-muted-foreground mt-1">INTERNAL_COMMUNITY_v1.0</p>
         </button>

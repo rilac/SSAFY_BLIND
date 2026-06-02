@@ -1,4 +1,4 @@
-# SSAFY BLIND — 사내 익명 커뮤니티
+# SSAFY SOOP — 사내 익명 커뮤니티
 
 > 상태: **Phase A~D(리뷰 반영) + Access/Refresh 토큰 분리 + Flyway 마이그레이션 + Phase E 기능 확장 11종 완료** · 운영 완성도 약 95%
 > 진행 현황은 [WORKLOG.md](./WORKLOG.md), 기능 확장(Phase E) 롤백 인덱스는 [FEATURES.md](./FEATURES.md), 분석/로드맵은 [MoreDevelopments.md](./MoreDevelopments.md) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md) 참고

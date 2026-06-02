@@ -1,4 +1,4 @@
-# WORKLOG — SSAFY_BLIND 개선 작업 내역
+# WORKLOG — SSAFY_SOOP 개선 작업 내역
 
 사내 블라인드형 익명 커뮤니티(Spring Boot + React)의 1차/2차 리뷰 반영 작업 기록입니다.
 분석/계획 문서는 [MoreDevelopments.md](./MoreDevelopments.md)(1차) · [MoreDevelopments_V2.md](./MoreDevelopments_V2.md)(2차)이며, 본 문서는 **무엇을 실제로 구현했는지**를 한곳에 모은 진행 현황입니다.

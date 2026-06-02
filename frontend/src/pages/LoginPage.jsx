@@ -38,7 +38,7 @@ export default function LoginPage() {
     <div className="min-h-screen w-full bg-background text-foreground flex items-center justify-center p-6">
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-mono tracking-tight mb-2">SSAFY_BLIND</h1>
+          <h1 className="text-3xl font-mono tracking-tight mb-2">SSAFY_SOOP</h1>
           <p className="text-sm font-mono text-muted-foreground">INTERNAL_COMMUNITY_v1.0</p>
         </div>
 

@@ -4,7 +4,7 @@ import { X } from 'lucide-react';
 // 신고 사유 — 백엔드 ReportReason enum과 1:1
 const REASONS = [
   { value: 'GAMBLING_OR_ADULT', label: '사행성·선정성' },
-  { value: 'OFF_TOPIC', label: '블라인드 취지에 맞지 않음' },
+  { value: 'OFF_TOPIC', label: '커뮤니티 취지에 맞지 않음' },
   { value: 'PERSONAL_ATTACK', label: '인신공격·과도한 비방' },
   { value: 'SPAM', label: '스팸·광고' },
   { value: 'ETC', label: '기타' },
