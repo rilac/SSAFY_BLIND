@@ -92,7 +92,7 @@ export default function SettingsPage() {
             <Logo size={20} className="text-primary" />
             <h1 className="text-xl font-mono tracking-tight">SSAFY_SOOP</h1>
           </div>
-          <p className="text-xs font-mono text-muted-foreground mt-1">INTERNAL_COMMUNITY_v1.0</p>
+          <p className="text-xs font-mono text-muted-foreground mt-1">INTERNAL_COMMUNITY_v1.1</p>
         </button>
         <div className="flex-1 p-4 space-y-1">
           <button
@@ -120,7 +120,7 @@ export default function SettingsPage() {
           <div className="space-y-6">
             {/* Profile */}
             <section className="border border-border bg-card p-6">
-              <h2 className="text-lg font-mono mb-4">프로필 정보</h2>
+              <h2 className="text-lg font-mono font-semibold tracking-tight mb-4">프로필 정보</h2>
               <div className="space-y-3 text-sm">
                 <div className="flex justify-between">
                   <span className="font-mono text-muted-foreground">닉네임</span>
@@ -141,7 +141,7 @@ export default function SettingsPage() {
             <section className="border border-border bg-card p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <h2 className="text-lg font-mono mb-1">다크 모드</h2>
+                  <h2 className="text-lg font-mono font-semibold tracking-tight mb-1">다크 모드</h2>
                   <p className="text-sm font-mono text-muted-foreground">화면 테마를 변경합니다</p>
                 </div>
                 <button
@@ -155,7 +155,7 @@ export default function SettingsPage() {
 
             {/* Dormant */}
             <section className="border border-border bg-card p-6">
-              <h2 className="text-lg font-mono mb-2">휴면 계정 전환</h2>
+              <h2 className="text-lg font-mono font-semibold tracking-tight mb-2">휴면 계정 전환</h2>
               <p className="text-sm font-mono text-muted-foreground mb-4">
                 일정 기간 계정을 사용하지 않을 경우 휴면 상태로 전환됩니다. 계정 정보는 보관되며 재로그인 시 복구됩니다.
               </p>
@@ -170,7 +170,7 @@ export default function SettingsPage() {
 
             {/* Withdrawal */}
             <section className="border border-destructive bg-card p-6">
-              <h2 className="text-lg font-mono mb-2 text-destructive">회원 탈퇴</h2>
+              <h2 className="text-lg font-mono font-semibold tracking-tight mb-2 text-destructive">회원 탈퇴</h2>
               <p className="text-sm font-mono text-muted-foreground mb-4">
                 회원 탈퇴 시 작성한 게시글과 댓글은 익명으로 보존되며, 계정 정보는 즉시 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
               </p>

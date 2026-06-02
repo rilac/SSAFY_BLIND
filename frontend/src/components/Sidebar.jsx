@@ -56,7 +56,7 @@ export default function Sidebar({
           <Logo size={20} className="text-primary" />
           <h1 className="text-xl font-mono tracking-tight">SSAFY_SOOP</h1>
         </div>
-        <p className="text-xs font-mono text-muted-foreground mt-1">INTERNAL_COMMUNITY_v1.0</p>
+        <p className="text-xs font-mono text-muted-foreground mt-1">INTERNAL_COMMUNITY_v1.1</p>
       </button>
 
       <nav className="flex-1 overflow-y-auto p-4">

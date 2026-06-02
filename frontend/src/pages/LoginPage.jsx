@@ -39,11 +39,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-mono tracking-tight mb-2">SSAFY_SOOP</h1>
-          <p className="text-sm font-mono text-muted-foreground">INTERNAL_COMMUNITY_v1.0</p>
+          <p className="text-sm font-mono text-muted-foreground">INTERNAL_COMMUNITY_v1.1</p>
         </div>
 
         <form onSubmit={handleLogin} className="border border-border bg-card p-8">
-          <h2 className="text-lg font-mono mb-6">Mattermost 로그인</h2>
+          <h2 className="text-lg font-mono font-semibold tracking-tight mb-6">Mattermost 로그인</h2>
 
           <div className="space-y-4">
             <div>
