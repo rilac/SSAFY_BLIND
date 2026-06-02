@@ -19,7 +19,8 @@
 
 1. ✅ **Phase E 8기능 + UX 버그픽스 전부 커밋·푸시 완료**(`origin/main` — reactions `cdd7d4d`, 본 계획 doc 커밋까지). 미커밋 없음.
 2. ✅ **주간 인기글 다이제스트(weekly-digest) 구현·검증 완료(2026-06-02), 미커밋**. 백엔드 전용(스키마 무변경, 프론트 무변경). 마커 `[FEATURE:weekly-digest]` + `FEATURES.md` 인덱싱 완료. 검증: backend `./gradlew test` BUILD SUCCESSFUL(신규 단위 4 + @DataJpaTest 4 포함 전체 통과). 상세는 아래 [🗓️ 주간 인기글 다이제스트](#️-계획--주간-인기글-다이제스트-weekly-digest-내일-구현) 섹션.
-   - ✅ **공지/고정글(pinned-posts) 구현·검증 완료(2026-06-02), 미커밋**(`FEATURES.md` `pinned-posts`). 관리자가 글 상단 고정→피드 항상 최상단+"공지" 배지. **Flyway V6**(`posts.pinned`). 백엔드(`Post.pinned`/`togglePin`, 두 정렬쿼리 `p.pinned DESC`, `AdminService.togglePin`+`POST /admin/posts/{id}/pin`, DTO 2종 `post.isPinned()`로 호출부 무변경) + 프론트(PostCard 배지, PostDetailPage 관리자 토글 버튼·useAuth). 검증: `./gradlew test` 전체 통과(AdminServiceTest 토글 + 신규 `PostPinnedRepositoryTest` @DataJpaTest 3종), `npm run build` 성공. **다음 후보: 모더레이션 강화(강제 숨김·감사 로그) / 북마크 폴더 / 소프트삭제.**
+   - ✅ **공지/고정글(pinned-posts) 커밋·푸시 완료(2026-06-02, origin/main `92c9577`)**(`FEATURES.md` `pinned-posts`). 관리자가 글 상단 고정→피드 항상 최상단+"공지" 배지. **Flyway V6**(`posts.pinned`). 백엔드(`Post.pinned`/`togglePin`, 두 정렬쿼리 `p.pinned DESC`, `AdminService.togglePin`+`POST /admin/posts/{id}/pin`, DTO 2종 `post.isPinned()`로 호출부 무변경) + 프론트(PostCard 배지, PostDetailPage 관리자 토글 버튼·useAuth). (weekly-digest는 `b7b8e96` 인프라+`4524bdc` 보완으로 커밋·푸시 완료.)
+   - ✅ **신고 대시보드/통계(report-dashboard) 구현·검증 완료(2026-06-02), 미커밋**(`FEATURES.md` `report-dashboard`). §6-1 모더레이션. 관리자 페이지에 신고 통계(요약+사유별+일별 추이) — **스키마 무변경**(기존 reports/posts 집계). 백엔드(`GET /admin/reports/stats`, `ReportStatsResponse` 신규, `ReportRepository.countByReason`/`findCreatedAtSince`, `AdminService.getReportStats`[getReportedPosts 재사용·14일 추이 0채움]) + 프론트(AdminPage `ReportStats`/`StatCard` 대시보드). 검증: `./gradlew test` 전체 통과(AdminServiceTest 통계 1종 추가), `npm run build` 성공. **다음 후보: 관리자 강제 숨김+감사로그 / 북마크 폴더 / 소프트삭제.**
 3. **검증 리마인더** — dev MySQL로 `bootRun` 1회 시 **Flyway V1~V5 자동 적용**(`flyway_schema_history`; `accepted_comment_id`·`parent_id`·`poll_*`·`post_likes.reaction_type`). weekly-digest·op-alias·라운지·unread-new는 스키마 무변경. E2E는 MM+MySQL 스택 필요(단위·@DataJpaTest·프론트 빌드 검증은 완료). ⚠️ V4·V5는 수기 DDL이라 실 MySQL `validate` 최종 확인 권장(V5는 클론 테이블로 DDL 검증 완료). weekly-digest 실발송 수동 확인은 cron 임박 시각 설정 또는 `WeeklyDigestService.sendWeeklyDigest()` 직접 호출.
 4. **테스트 폭(여력 시)** — 컨트롤러 슬라이스(@WebMvcTest), 인가 케이스 확장. (CommentService 단위[채택·별칭·대댓글]·PostService 단위[scope]·PollService 단위·삭제 통합·라운지 @DataJpaTest·헬스/인가 스모크·RefreshTokenService는 완료)
 
@@ -354,8 +355,9 @@ Phase B에서 이연했던 "토큰 폐기(Refresh)"를 실무 표준 2토큰 구
 - ✅ **읽음 표시/안 읽은 새 글 배지**(완료·커밋 `45a3567` — `FEATURES.md` unread-new, 스키마 무변경·PostView 재사용).
 - ✅ **다양한 반응(좋아요/도움돼요/정보/공감)**(완료·커밋 `cdd7d4d` — `FEATURES.md` reactions, Flyway V5).
 - ✅ **주간 인기글 다이제스트(weekly-digest)**(완료·미커밋 — `FEATURES.md` weekly-digest, 스키마 무변경).
-- ✅ **공지/고정글(pinned-posts)**(완료·미커밋 — `FEATURES.md` pinned-posts, Flyway V6, 관리자 상단 고정+피드 최상단+공지 배지).
-- 남음(§6 백로그): 모더레이션 강화(소프트삭제+휴지통·감사 로그·강제 숨김), 북마크 폴더/메모, 알림 확장/실시간, MM DM 연동 등. (스터디/팀원 모집은 익명 보드 특성상 제외.) 상세는 V2 §6.
+- ✅ **공지/고정글(pinned-posts)**(완료·커밋·푸시 `92c9577` — `FEATURES.md` pinned-posts, Flyway V6, 관리자 상단 고정+피드 최상단+공지 배지).
+- ✅ **신고 대시보드/통계(report-dashboard)**(완료·미커밋 — `FEATURES.md` report-dashboard, §6-1, 스키마 무변경, 관리자 통계 요약+사유별+일별 추이).
+- 남음(§6 백로그): 모더레이션 강화(소프트삭제+휴지통·감사 로그·관리자 강제 숨김), 북마크 폴더/메모, 알림 확장/실시간, MM DM 연동 등. (스터디/팀원 모집은 익명 보드 특성상 제외.) 상세는 V2 §6.
 
 ---
 

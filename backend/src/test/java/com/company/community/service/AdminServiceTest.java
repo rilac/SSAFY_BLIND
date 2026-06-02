@@ -7,6 +7,7 @@ import com.company.community.domain.User;
 import com.company.community.domain.UserRole;
 import com.company.community.domain.UserStatus;
 import com.company.community.dto.AdminReportedPostResponse;
+import com.company.community.dto.ReportStatsResponse;
 import com.company.community.repository.PostRepository;
 import com.company.community.repository.ReportRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,10 +18,14 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 @ExtendWith(MockitoExtension.class)
@@ -71,6 +76,46 @@ class AdminServiceTest {
         assertThat(post.isHidden()).isFalse();
         assertThat(post.isReviewed()).isTrue();
     }
+
+    // [FEATURE:report-dashboard] 신고 통계 — 사유별 집계 + 신고 글 상태 + 일별 추이.
+    @Test
+    @DisplayName("신고 통계는 사유별 집계·신고 글 상태·일별 추이를 반환한다")
+    void test_신고_통계() {
+        post.hide(); // 신고된 글이 숨김 처리된 상태
+        given(reportRepository.countByReason()).willReturn(List.of(
+                new Object[]{ReportReason.SPAM, 2L},
+                new Object[]{ReportReason.OFF_TOPIC, 1L}));
+        Report r1 = Report.builder().post(post).reporter(user).reason(ReportReason.SPAM).build();
+        Report r2 = Report.builder().post(post).reporter(user).reason(ReportReason.SPAM).build();
+        Report r3 = Report.builder().post(post).reporter(user).reason(ReportReason.OFF_TOPIC).build();
+        given(reportRepository.findAllByOrderByCreatedAtDesc()).willReturn(List.of(r1, r2, r3));
+        given(postRepository.findById(10L)).willReturn(Optional.of(post));
+        given(reportRepository.findCreatedAtSince(any()))
+                .willReturn(List.of(LocalDateTime.now(), LocalDateTime.now()));
+
+        ReportStatsResponse stats = adminService.getReportStats();
+
+        // 요약
+        assertThat(stats.getTotalReports()).isEqualTo(3);
+        assertThat(stats.getReportedPosts()).isEqualTo(1);
+        assertThat(stats.getHiddenPosts()).isEqualTo(1);
+        assertThat(stats.getPendingPosts()).isZero();
+        assertThat(stats.getResolvedRate()).isEqualTo(1.0);
+        // 사유별 — enum 5종 전부(0 포함)
+        assertThat(stats.getByReason()).hasSize(5);
+        Map<ReportReason, Long> rc = stats.getByReason().stream()
+                .collect(Collectors.toMap(ReportStatsResponse.ReasonCount::getReason,
+                        ReportStatsResponse.ReasonCount::getCount));
+        assertThat(rc).containsEntry(ReportReason.SPAM, 2L)
+                .containsEntry(ReportReason.OFF_TOPIC, 1L)
+                .containsEntry(ReportReason.ETC, 0L);
+        // 일별 추이 — 14일 윈도(0 채움), 오늘 2건이 마지막 칸에 집계
+        assertThat(stats.getDaily()).hasSize(14);
+        assertThat(stats.getDaily().stream()
+                .mapToLong(ReportStatsResponse.DailyCount::getCount).sum()).isEqualTo(2);
+        assertThat(stats.getDaily().get(13).getCount()).isEqualTo(2);
+    }
+    // [/FEATURE:report-dashboard]
 
     // [FEATURE:pinned-posts] 공지 고정 토글 — 미고정→고정→해제, 새 상태 반환.
     @Test

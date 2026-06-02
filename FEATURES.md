@@ -304,3 +304,33 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 3. DB: `alter table posts drop column pinned;` (V6 적용 환경) — 미적용이면 불필요.
 
 **미적용(후속 후보)**: 전역 공지(필터 무시 항상 노출), 고정 만료/예약, 고정 순서 지정, 카테고리별 공지, 고정 시 작성자/유저 알림, 관리자 페이지에서 고정 목록 관리.
+
+---
+
+## report-dashboard — 신고 대시보드/통계 (2026-06-02)
+
+§6-1 모더레이션. 관리자 페이지에 **신고 통계**(요약 + 사유별 + 일별 추이)를 노출. **기존 `reports`/`posts` 집계만 사용 → 스키마 변경/Flyway 없음.** 백엔드 + 프론트엔드.
+
+**범위/동작**
+- API: `GET /api/admin/reports/stats`(관리자 전용, SecurityConfig `/api/admin/**`) → `ReportStatsResponse`.
+- 요약: `totalReports`(전체 신고 건수), `reportedPosts`(신고된 글 distinct), `hiddenPosts`(그 중 숨김), `pendingPosts`(숨김도 검토완료도 아닌 미처리), `resolvedRate`=`(reportedPosts-pendingPosts)/reportedPosts`(신고 글 없으면 0).
+- 사유별: `byReason`=`[{reason,label,count}]` — **enum 전체를 선언 순서로 0 포함**(차트 일관성). `ReportRepository.countByReason()`(GROUP BY) 집계. `reason`은 nullable(레거시)이라 null은 막대에서 제외하되 `totalReports`엔 포함.
+- 일별 추이: `daily`=`[{date,count}]` — 최근 **14일**(상수 `DAILY_WINDOW_DAYS`), **0건 날짜도 0으로 채움**(연속). `ReportRepository.findCreatedAtSince(since)`로 시각만 가볍게 조회 후 서비스에서 `LocalDate` 누적(`TreeMap` 오름차순).
+- 글 상태(reportedPosts/hidden/pending)는 기존 `getReportedPosts()` 산출 로직을 재사용(글별 숨김/검토 여부 포함).
+- UI: `AdminPage` 상단에 `ReportStats` 섹션 — 요약 카드 4개(`StatCard`) + 사유별 가로 막대 + 일별 세로 막대(hover 시 날짜·건수 title). 기존 `fetchAll`의 `Promise.allSettled`에 stats 요청 추가(한쪽 실패해도 독립 렌더).
+
+**알려진 동작/한계**: ① 추이 윈도 14일 고정(상수). ② 통계는 매 진입 시 재계산(캐시 없음) — `getReportStats`가 `countByReason`+`getReportedPosts`(reports 전체 그룹핑)+`findCreatedAtSince`를 호출하므로 신고가 매우 많아지면 부담(MVP 범위). ③ `pendingPosts`/`resolvedRate`는 "숨김 또는 검토완료"를 처리됨으로 간주(별도 처리상태 컬럼 없음). ④ 차트는 라이브러리 없이 div 막대(의존성 추가 없음). ⑤ 스키마 무변경.
+
+**마커 위치 (`[FEATURE:report-dashboard]`)**
+- (신규) 백엔드: `dto/ReportStatsResponse.java`(중첩 `ReasonCount`/`DailyCount` 포함) — 파일 전체.
+- 백엔드(수정): `repository/ReportRepository.java`(`countByReason`·`findCreatedAtSince` + `LocalDateTime` import), `service/AdminService.java`(`getReportStats`+`DAILY_WINDOW_DAYS`+imports), `controller/AdminController.java`(`GET /reports/stats` + `ReportStatsResponse` import). 테스트: `AdminServiceTest`(통계 1종, 마커 블록).
+- 프론트(수정): `pages/AdminPage.jsx`(`stats` state, `fetchAll` stats 요청, `ReportStats`/`StatCard` 컴포넌트, 대시보드 렌더).
+
+**롤백 절차**
+1. 위 파일들에서 `[FEATURE:report-dashboard]` 마커 블록 제거.
+   - `AdminController`: stats 엔드포인트 + import 제거. `AdminService`: `getReportStats`·`DAILY_WINDOW_DAYS`·추가 import 제거. `ReportRepository`: 두 쿼리 + `LocalDateTime` import 제거.
+   - `AdminPage`: `stats` state·`fetchAll`의 stats 요청·`{stats && <ReportStats/>}`·`ReportStats`/`StatCard` 컴포넌트 제거(`Promise.allSettled`를 reported/feedback 2개로 환원).
+2. 신규 파일 삭제: `dto/ReportStatsResponse.java`. `AdminServiceTest`의 통계 블록 제거.
+3. DB/마이그레이션 변경 없음.
+
+**미적용(후속 후보)**: 추이 윈도/기간 선택(7·30·90일), 처리 상태 컬럼·SLA, 신고자/대상자 랭킹, 통계 캐시·집계 테이블, CSV 내보내기, 차트 라이브러리 도입.

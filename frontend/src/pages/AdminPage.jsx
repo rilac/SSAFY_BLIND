@@ -20,6 +20,7 @@ export default function AdminPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [reported, setReported] = useState([]);
+  const [stats, setStats] = useState(null); // [FEATURE:report-dashboard]
   const [feedback, setFeedback] = useState([]);
   const [loading, setLoading] = useState(true);
   // 커스텀 모달(M-NEW-4): 네이티브 alert/confirm 대체
@@ -35,8 +36,9 @@ export default function AdminPage() {
     // 신고 목록과 건의함을 독립적으로 처리한다(allSettled).
     // 한쪽 요청이 실패해도(예: 신고-게시글 데이터 정합 이슈) 다른 쪽은 정상 표시.
     const fetchAll = async () => {
-      const [reportedResult, feedbackResult] = await Promise.allSettled([
+      const [reportedResult, statsResult, feedbackResult] = await Promise.allSettled([
         api.get('/admin/posts/reported'),
+        api.get('/admin/reports/stats'), // [FEATURE:report-dashboard]
         api.get('/admin/feedback'),
       ]);
       if (reportedResult.status === 'fulfilled') {
@@ -44,6 +46,13 @@ export default function AdminPage() {
       } else {
         console.error('신고 게시물 조회 실패', reportedResult.reason);
       }
+      // [FEATURE:report-dashboard]
+      if (statsResult.status === 'fulfilled') {
+        setStats(statsResult.value.data);
+      } else {
+        console.error('신고 통계 조회 실패', statsResult.reason);
+      }
+      // [/FEATURE:report-dashboard]
       if (feedbackResult.status === 'fulfilled') {
         setFeedback(feedbackResult.value.data);
       } else {
@@ -112,6 +121,9 @@ export default function AdminPage() {
           <p className="text-sm font-mono text-muted-foreground">불러오는 중...</p>
         ) : (
           <div className="space-y-10">
+            {/* [FEATURE:report-dashboard] 신고 통계 대시보드 */}
+            {stats && <ReportStats stats={stats} />}
+            {/* [/FEATURE:report-dashboard] */}
             {/* 신고/숨김 게시물 */}
             <section>
               <h2 className="text-lg font-mono mb-4">신고된 게시물 ({reported.length})</h2>
@@ -220,3 +232,76 @@ export default function AdminPage() {
     </div>
   );
 }
+
+// [FEATURE:report-dashboard] 신고 통계 대시보드 — 요약 카드 + 사유별 막대 + 일별 추이.
+function ReportStats({ stats }) {
+  const maxReason = Math.max(1, ...stats.byReason.map((r) => r.count));
+  const maxDaily = Math.max(1, ...stats.daily.map((d) => d.count));
+  return (
+    <section>
+      <h2 className="text-lg font-mono mb-4">신고 통계</h2>
+
+      {/* 요약 카드 */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+        <StatCard label="총 신고" value={stats.totalReports} />
+        <StatCard label="신고된 글" value={stats.reportedPosts} />
+        <StatCard label="숨김 글" value={stats.hiddenPosts} />
+        <StatCard label="처리율" value={`${Math.round(stats.resolvedRate * 100)}%`} />
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* 사유별 신고 (가로 막대) */}
+        <div className="border border-border bg-card p-5">
+          <h3 className="text-sm font-mono text-muted-foreground mb-3">사유별 신고</h3>
+          <div className="space-y-2">
+            {stats.byReason.map((r) => (
+              <div key={r.reason} className="flex items-center gap-2 text-xs font-mono">
+                <span className="w-24 shrink-0 text-muted-foreground truncate" title={r.label}>
+                  {r.label}
+                </span>
+                <div className="flex-1 bg-muted h-4">
+                  <div
+                    className="bg-primary h-4 transition-all"
+                    style={{ width: `${(r.count / maxReason) * 100}%` }}
+                  />
+                </div>
+                <span className="w-6 text-right">{r.count}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* 일별 추이 (세로 막대) */}
+        <div className="border border-border bg-card p-5">
+          <h3 className="text-sm font-mono text-muted-foreground mb-3">
+            최근 {stats.daily.length}일 신고 추이
+          </h3>
+          <div className="flex items-end gap-1 h-24">
+            {stats.daily.map((d) => (
+              <div
+                key={d.date}
+                className="flex-1 bg-primary/80 hover:bg-primary transition-colors"
+                style={{ height: `${(d.count / maxDaily) * 100}%`, minHeight: d.count > 0 ? '3px' : '1px' }}
+                title={`${d.date} · ${d.count}건`}
+              />
+            ))}
+          </div>
+          <div className="flex justify-between text-[10px] font-mono text-muted-foreground mt-2">
+            <span>{stats.daily[0]?.date?.slice(5)}</span>
+            <span>{stats.daily[stats.daily.length - 1]?.date?.slice(5)}</span>
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="border border-border bg-card p-4">
+      <div className="text-2xl font-mono">{value}</div>
+      <div className="text-xs font-mono text-muted-foreground mt-1">{label}</div>
+    </div>
+  );
+}
+// [/FEATURE:report-dashboard]

@@ -4,17 +4,23 @@ import com.company.community.domain.Post;
 import com.company.community.domain.Report;
 import com.company.community.domain.ReportReason;
 import com.company.community.dto.AdminReportedPostResponse;
+import com.company.community.dto.ReportStatsResponse;
 import com.company.community.repository.PostRepository;
 import com.company.community.repository.ReportRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Comparator;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.TreeMap;
 import java.util.stream.Collectors;
 
 // 관리자 — 신고 검수 / 숨김 복원
@@ -61,4 +67,53 @@ public class AdminService {
         return post.isPinned();
     }
     // [/FEATURE:pinned-posts]
+
+    // [FEATURE:report-dashboard] 일별 추이 윈도(최근 N일). 0건 날짜도 0으로 채워 차트 연속성 보장.
+    private static final int DAILY_WINDOW_DAYS = 14;
+
+    // [FEATURE:report-dashboard] 신고 통계 — 요약(총신고/신고글/숨김/미처리/처리율) + 사유별 + 일별 추이.
+    @Transactional(readOnly = true)
+    public ReportStatsResponse getReportStats() {
+        // 사유별 집계 — enum 전체를 선언 순서로 0 채움. reason=null(레거시)은 막대에서 제외하되 total엔 포함.
+        Map<ReportReason, Long> reasonCounts = new EnumMap<>(ReportReason.class);
+        long totalReports = 0;
+        for (Object[] row : reportRepository.countByReason()) {
+            ReportReason reason = (ReportReason) row[0];
+            long count = (Long) row[1];
+            totalReports += count;
+            if (reason != null) {
+                reasonCounts.merge(reason, count, Long::sum);
+            }
+        }
+        List<ReportStatsResponse.ReasonCount> byReason = Arrays.stream(ReportReason.values())
+                .map(r -> new ReportStatsResponse.ReasonCount(r, r.getLabel(), reasonCounts.getOrDefault(r, 0L)))
+                .collect(Collectors.toList());
+
+        // 신고된 글 상태 — 검수 목록 산출 로직 재사용(글별 숨김/검토 여부 포함)
+        List<AdminReportedPostResponse> reported = getReportedPosts();
+        long reportedPosts = reported.size();
+        long hiddenPosts = reported.stream().filter(AdminReportedPostResponse::isHidden).count();
+        long pendingPosts = reported.stream()
+                .filter(p -> !p.isHidden() && !p.isReviewed())
+                .count();
+        double resolvedRate = reportedPosts == 0 ? 0.0
+                : (double) (reportedPosts - pendingPosts) / reportedPosts;
+
+        // 일별 추이 — 최근 N일 윈도를 0으로 초기화한 뒤 since 이후 신고를 날짜별로 누적.
+        LocalDate startDate = LocalDate.now().minusDays(DAILY_WINDOW_DAYS - 1L);
+        Map<LocalDate, Long> dayCounts = new TreeMap<>();
+        for (int i = 0; i < DAILY_WINDOW_DAYS; i++) {
+            dayCounts.put(startDate.plusDays(i), 0L);
+        }
+        for (LocalDateTime ts : reportRepository.findCreatedAtSince(startDate.atStartOfDay())) {
+            dayCounts.computeIfPresent(ts.toLocalDate(), (d, c) -> c + 1);
+        }
+        List<ReportStatsResponse.DailyCount> daily = dayCounts.entrySet().stream()
+                .map(e -> new ReportStatsResponse.DailyCount(e.getKey(), e.getValue()))
+                .collect(Collectors.toList());
+
+        return new ReportStatsResponse(totalReports, reportedPosts, hiddenPosts, pendingPosts,
+                resolvedRate, byReason, daily);
+    }
+    // [/FEATURE:report-dashboard]
 }

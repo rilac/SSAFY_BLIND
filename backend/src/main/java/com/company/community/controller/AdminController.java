@@ -2,6 +2,7 @@ package com.company.community.controller;
 
 import com.company.community.dto.AdminReportedPostResponse;
 import com.company.community.dto.FeedbackResponse;
+import com.company.community.dto.ReportStatsResponse;
 import com.company.community.service.AdminService;
 import com.company.community.service.FeedbackService;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,15 @@ public class AdminController {
         return ResponseEntity.ok(Map.of("pinned", pinned));
     }
     // [/FEATURE:pinned-posts]
+
+    /**
+     * [FEATURE:report-dashboard] GET /api/admin/reports/stats — 신고 통계(요약 + 사유별 + 일별 추이).
+     */
+    @GetMapping("/reports/stats")
+    public ResponseEntity<ReportStatsResponse> reportStats() {
+        return ResponseEntity.ok(adminService.getReportStats());
+    }
+    // [/FEATURE:report-dashboard]
 
     /**
      * GET /api/admin/feedback — 건의함 전체 조회

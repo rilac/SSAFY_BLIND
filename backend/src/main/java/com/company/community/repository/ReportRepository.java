@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 public interface ReportRepository extends JpaRepository<Report, Long> {
@@ -25,4 +26,12 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     @Modifying
     @Query("DELETE FROM Report r WHERE r.post.id = :postId")
     void deleteByPostId(@Param("postId") Long postId);
+
+    // [FEATURE:report-dashboard] 사유별 신고 집계 — (reason, count). reason은 nullable(레거시)이라 호출측에서 null 가드.
+    @Query("SELECT r.reason, COUNT(r) FROM Report r GROUP BY r.reason")
+    List<Object[]> countByReason();
+
+    // [FEATURE:report-dashboard] 일별 추이용 — since 이후 신고 시각만 가볍게 조회(엔티티 대신 스칼라).
+    @Query("SELECT r.createdAt FROM Report r WHERE r.createdAt >= :since")
+    List<LocalDateTime> findCreatedAtSince(@Param("since") LocalDateTime since);
 }
