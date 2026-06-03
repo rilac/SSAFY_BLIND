@@ -126,7 +126,7 @@ export default function AdminPage() {
             {/* [/FEATURE:report-dashboard] */}
             {/* 신고/숨김 게시물 */}
             <section>
-              <h2 className="text-lg font-mono mb-4">신고된 게시물 ({reported.length})</h2>
+              <h2 className="text-lg font-mono font-semibold tracking-tight mb-4">신고된 게시물 ({reported.length})</h2>
               {reported.length === 0 ? (
                 <div className="border border-border bg-card p-8 text-center text-sm font-mono text-muted-foreground">
                   신고된 게시물이 없습니다
@@ -190,7 +190,7 @@ export default function AdminPage() {
 
             {/* 건의함 */}
             <section>
-              <h2 className="text-lg font-mono mb-4">건의함 ({feedback.length})</h2>
+              <h2 className="text-lg font-mono font-semibold tracking-tight mb-4">건의함 ({feedback.length})</h2>
               {feedback.length === 0 ? (
                 <div className="border border-border bg-card p-8 text-center text-sm font-mono text-muted-foreground">
                   접수된 건의가 없습니다
@@ -239,7 +239,7 @@ function ReportStats({ stats }) {
   const maxDaily = Math.max(1, ...stats.daily.map((d) => d.count));
   return (
     <section>
-      <h2 className="text-lg font-mono mb-4">신고 통계</h2>
+      <h2 className="text-lg font-mono font-semibold tracking-tight mb-4">신고 통계</h2>
 
       {/* 요약 카드 */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">

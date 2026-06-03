@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2, BarChart3, Check, Pin } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll] · Pin: [FEATURE:pinned-posts]
+import { ArrowLeft, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2, BarChart3, Check, Pin, MessageSquare, FileX2 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll] · Pin: [FEATURE:pinned-posts] · MessageSquare/FileX2: 빈/오류 상태 글리프
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext'; // [FEATURE:pinned-posts] 관리자 여부 판별
 import ReportModal from '../components/ReportModal';
@@ -255,7 +255,9 @@ export default function PostDetailPage() {
         <div className="max-w-3xl mx-auto p-6">
           {backBtn}
           <div className="border border-border bg-card p-12 text-center">
+            <FileX2 size={32} className="mx-auto mb-3 text-muted-foreground opacity-50" />
             <p className="text-sm font-mono text-muted-foreground">{error || '게시글을 찾을 수 없습니다.'}</p>
+            <p className="text-xs font-mono text-muted-foreground opacity-70 mt-1.5">삭제되었거나 주소가 올바르지 않을 수 있어요</p>
           </div>
         </div>
       </div>
@@ -295,13 +297,13 @@ export default function PostDetailPage() {
         {/* [/FEATURE:qna-accept] */}
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm flex-1">{comment.content}</p>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1 shrink-0">
             {/* [FEATURE:qna-accept] 질문 작성자만 채택 토글(최상위 답변 한정) */}
             {canAccept && (
               <button
                 onClick={() => handleAcceptToggle(comment.id)}
                 disabled={acceptLoading === comment.id}
-                className={`flex items-center gap-1 text-xs font-mono transition-colors disabled:opacity-50 ${
+                className={`flex items-center gap-1 text-xs font-mono px-2 py-1.5 hover:bg-muted transition-colors disabled:opacity-50 ${
                   accepted ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -316,7 +318,7 @@ export default function PostDetailPage() {
                   setReplyingTo(replyingTo === comment.id ? null : comment.id);
                   setReplyInput('');
                 }}
-                className="text-xs font-mono text-muted-foreground hover:text-foreground transition-colors"
+                className="text-xs font-mono px-2 py-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 답글
               </button>
@@ -324,7 +326,7 @@ export default function PostDetailPage() {
             {comment.isMine && (
               <button
                 onClick={() => handleDeleteComment(comment.id)}
-                className="text-xs font-mono text-destructive hover:opacity-80 transition-opacity"
+                className="text-xs font-mono px-2 py-1.5 text-destructive hover:bg-muted transition-colors"
               >
                 삭제
               </button>
@@ -522,10 +524,14 @@ export default function PostDetailPage() {
 
         {/* 댓글 */}
         <section className="border border-border bg-card p-6">
-          <h2 className="text-sm font-mono mb-4">댓글 {comments.length}개</h2>
+          <h2 className="text-base font-mono font-semibold tracking-tight mb-4">댓글 {comments.length}개</h2>
 
           {comments.length === 0 ? (
-            <p className="text-xs font-mono text-muted-foreground mb-4">아직 댓글이 없습니다.</p>
+            <div className="text-center py-6 mb-4">
+              <MessageSquare size={24} className="mx-auto mb-2 text-muted-foreground opacity-50" />
+              <p className="text-xs font-mono text-muted-foreground">아직 댓글이 없습니다.</p>
+              <p className="text-[10px] font-mono text-muted-foreground opacity-70 mt-1">가장 먼저 댓글을 남겨보세요</p>
+            </div>
           ) : (
             <div className="space-y-3 mb-4">
               {/* [FEATURE:nested-comments] 최상위 댓글 + 답글(들여쓰기) + 답글 입력 (평면 map → 그룹핑 렌더로 대체) */}

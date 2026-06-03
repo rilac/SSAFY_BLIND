@@ -25,7 +25,10 @@
   --accent-foreground: #ffffff;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: rgba(14, 165, 233, 0.15);
+  /* 헤어라인 보더는 이 플랫(무그림자) 시스템의 유일한 구조 장치다. 15%는
+     앨리스블루 캔버스 위에서 카드 모서리가 사라질 만큼 옅어, 22%로 살짝 올려
+     박스 구조가 또렷하게 읽히도록 한다(DESIGN_REVIEW: borders carry the structure). */
+  --border: rgba(14, 165, 233, 0.22);
   --input: rgba(14, 165, 233, 0.1);
   --input-background: #ffffff;
   --ring: #0ea5e9;
@@ -48,7 +51,7 @@
   --accent-foreground: #0a1929;
   --destructive: #ef4444;
   --destructive-foreground: #ffffff;
-  --border: rgba(56, 189, 248, 0.15);
+  --border: rgba(56, 189, 248, 0.22);
   --input: rgba(56, 189, 248, 0.1);
   --input-background: #0f2438;
   --ring: #38bdf8;
@@ -71,6 +74,15 @@
      Mono에 없으므로 Pretendard로 폴백(글리프 단위 폴백) → 한글 제목 가독성 확보. */
   h1, h2, h3, h4, h5, h6 {
     font-family: 'JetBrains Mono', 'Pretendard Variable', 'Pretendard', monospace;
+  }
+
+  /* §접근성 — 키보드 포커스 링. 브루탈리즘에 맞춰 글로우 없이 1px 사각 아웃라인(--ring).
+     :focus-visible라 마우스 클릭엔 안 뜨고 키보드 탭에만 노출 → 기존 룩 불변.
+     인풋은 utilities 레이어의 focus:outline-none + focus:border-primary가 이 base 규칙을
+     덮으므로 이중 링 없이 보더-프라이머리 포커스를 유지한다. */
+  :focus-visible {
+    outline: 1px solid var(--ring);
+    outline-offset: 2px;
   }
 }
 

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { FileText } from 'lucide-react'; // 빈 피드 상태 글리프
 import axios from 'axios';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
@@ -23,6 +24,14 @@ function viewLabel(scope, category, user) {
   // [/FEATURE:cohort-campus-lounge]
   if (category === 'all') return '전체글';
   return CATEGORY_LABELS[category] || '전체글';
+}
+
+// 빈 상태 안내 한 줄 — 현재 뷰(검색/스크랩/내 글/일반)에 맞춰 다음 행동을 제시한다.
+function emptyHint(scope, search) {
+  if (search) return '다른 키워드로 검색해보세요';
+  if (scope === 'bookmarked') return '관심 있는 글을 스크랩하면 여기에 모여요';
+  if (scope === 'mine') return '아직 작성한 글이 없어요';
+  return '첫 글을 작성해보세요';
 }
 
 export default function FeedPage() {
@@ -235,7 +244,7 @@ export default function FeedPage() {
         <main className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6">
             <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-mono">{viewLabel(scope, category, user)}</h2>
+              <h2 className="text-lg font-mono font-semibold tracking-tight">{viewLabel(scope, category, user)}</h2>
               {debouncedSearch && (
                 <span className="text-xs font-mono text-muted-foreground">SEARCH: "{debouncedSearch}"</span>
               )}
@@ -245,7 +254,11 @@ export default function FeedPage() {
               <p className="text-sm font-mono text-muted-foreground py-12 text-center">불러오는 중...</p>
             ) : posts.length === 0 ? (
               <div className="border border-border bg-card p-12 text-center">
+                <FileText size={32} className="mx-auto mb-3 text-muted-foreground opacity-50" />
                 <p className="text-sm font-mono text-muted-foreground">표시할 게시글이 없습니다</p>
+                <p className="text-xs font-mono text-muted-foreground opacity-70 mt-1.5">
+                  {emptyHint(scope, debouncedSearch)}
+                </p>
               </div>
             ) : (
               <>
