@@ -39,7 +39,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-mono tracking-tight mb-2">SSAFY_SOOP</h1>
-          <p className="text-sm font-mono text-muted-foreground">INTERNAL_COMMUNITY_v1.1</p>
+          <p className="text-sm font-mono text-muted-foreground">싸피인들을_위한_대나무숲v1.2</p>
         </div>
 
         <form onSubmit={handleLogin} className="border border-border bg-card p-8">
