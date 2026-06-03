@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, Trash2, RotateCcw, Shield } from 'lucide-react';
+import { ArrowLeft, Eye, Trash2, RotateCcw, Shield, CheckCircle2, XCircle } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatTimestamp } from '../lib/format';
@@ -36,6 +36,9 @@ export default function AdminPage() {
   const [confirmState, setConfirmState] = useState(null); // { ...props, onConfirm }
   const [reportedPage, setReportedPage] = useState(1); // 페이지네이션(5/페이지, 최신/건수순)
   const [feedbackPage, setFeedbackPage] = useState(1);
+  const [showProcessed, setShowProcessed] = useState(false); // 건의함: 처리된 건의 보기 토글
+  const [processedFeedback, setProcessedFeedback] = useState([]);
+  const [processedLoaded, setProcessedLoaded] = useState(false); // 처리됨 목록 1회 조회 캐시
 
   useEffect(() => {
     if (!user) return;
@@ -111,8 +114,36 @@ export default function AdminPage() {
     fn?.();
   };
 
+  // 건의 처리 — 상태 변경 후 미처리 목록에서 제거(처리됨 목록 캐시는 무효화 → 다음 토글 시 재조회)
+  const handleFeedbackStatus = async (id, status) => {
+    try {
+      await api.patch(`/admin/feedback/${id}/status`, { status });
+      setFeedback((prev) => prev.filter((f) => f.id !== id));
+      setProcessedLoaded(false);
+    } catch {
+      setNotice({ title: '처리 실패', message: '건의 상태 변경에 실패했습니다.' });
+    }
+  };
+
+  // 처리됨/미처리 보기 토글 — 처리됨은 최초 1회만 조회(이후 캐시, 처리 발생 시 무효화)
+  const toggleProcessed = async () => {
+    const next = !showProcessed;
+    setShowProcessed(next);
+    setFeedbackPage(1);
+    if (next && !processedLoaded) {
+      try {
+        const res = await api.get('/admin/feedback', { params: { processed: true } });
+        setProcessedFeedback(res.data);
+        setProcessedLoaded(true);
+      } catch {
+        setNotice({ title: '조회 실패', message: '처리된 건의를 불러오지 못했습니다.' });
+      }
+    }
+  };
+
   const reportedView = paginate(reported, reportedPage);
-  const feedbackView = paginate(feedback, feedbackPage);
+  const feedbackList = showProcessed ? processedFeedback : feedback;
+  const feedbackView = paginate(feedbackList, feedbackPage);
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground overflow-y-auto">
@@ -202,22 +233,65 @@ export default function AdminPage() {
               <Pager page={reportedView.current} pageCount={reportedView.pageCount} onChange={setReportedPage} />
             </section>
 
-            {/* 건의함 */}
+            {/* 건의함 — 미처리 기본 노출, '처리된 건의 보기' 토글 */}
             <section>
-              <h2 className="text-lg font-mono font-semibold tracking-tight mb-4">건의함 ({feedback.length})</h2>
-              {feedback.length === 0 ? (
+              <div className="flex items-center justify-between mb-4 gap-3">
+                <h2 className="text-lg font-mono font-semibold tracking-tight">
+                  건의함 ({feedbackList.length})
+                </h2>
+                <button
+                  onClick={toggleProcessed}
+                  className="px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors shrink-0"
+                >
+                  {showProcessed ? '미처리 건의 보기' : '처리된 건의 보기'}
+                </button>
+              </div>
+              {feedbackList.length === 0 ? (
                 <div className="border border-border bg-card p-8 text-center text-sm font-mono text-muted-foreground">
-                  접수된 건의가 없습니다
+                  {showProcessed ? '처리된 건의가 없습니다' : '접수된 건의가 없습니다'}
                 </div>
               ) : (
                 <div className="space-y-3">
                   {feedbackView.slice.map((f) => (
                     <div key={f.id} className="border border-border bg-card p-5">
-                      <h3 className="text-base font-semibold mb-2">{f.title}</h3>
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <h3 className="text-base font-semibold flex-1">{f.title}</h3>
+                        {f.status && f.status !== 'PENDING' && (
+                          <span
+                            className={`text-[10px] font-mono px-2 py-1 border shrink-0 ${
+                              f.status === 'RESOLVED'
+                                ? 'border-primary text-primary'
+                                : 'border-destructive text-destructive'
+                            }`}
+                          >
+                            {f.status === 'RESOLVED' ? '처리 완료' : '수용 안 함'}
+                          </span>
+                        )}
+                      </div>
                       <p className="text-sm whitespace-pre-wrap mb-3">{f.content}</p>
-                      <div className="text-xs font-mono text-muted-foreground">
-                        {f.author?.nickname} · {f.author?.cohort} {f.author?.campus} ·{' '}
-                        {formatTimestamp(f.createdAt)}
+                      <div className="flex items-center justify-between gap-3 flex-wrap">
+                        <div className="text-xs font-mono text-muted-foreground">
+                          {f.author?.nickname} · {f.author?.cohort} {f.author?.campus} ·{' '}
+                          {formatTimestamp(f.createdAt)}
+                        </div>
+                        {!showProcessed && (
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => handleFeedbackStatus(f.id, 'RESOLVED')}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
+                            >
+                              <CheckCircle2 size={12} />
+                              처리 완료
+                            </button>
+                            <button
+                              onClick={() => handleFeedbackStatus(f.id, 'REJECTED')}
+                              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border text-muted-foreground hover:border-destructive hover:text-destructive transition-colors"
+                            >
+                              <XCircle size={12} />
+                              수용 안 함
+                            </button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

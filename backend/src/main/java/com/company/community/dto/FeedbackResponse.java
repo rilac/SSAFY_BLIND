@@ -1,6 +1,7 @@
 package com.company.community.dto;
 
 import com.company.community.domain.Feedback;
+import com.company.community.domain.FeedbackStatus;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 
@@ -16,6 +17,7 @@ public class FeedbackResponse {
     private String content;
     private AuthorInfo author;
     private LocalDateTime createdAt;
+    private FeedbackStatus status;
 
     public static FeedbackResponse of(Feedback feedback) {
         return new FeedbackResponse(
@@ -23,7 +25,8 @@ public class FeedbackResponse {
                 feedback.getTitle(),
                 feedback.getContent(),
                 AuthorInfo.of(feedback.getAuthor()),
-                feedback.getCreatedAt()
+                feedback.getCreatedAt(),
+                feedback.getStatus()
         );
     }
 }

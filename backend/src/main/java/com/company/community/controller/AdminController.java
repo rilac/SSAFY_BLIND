@@ -2,9 +2,11 @@ package com.company.community.controller;
 
 import com.company.community.dto.AdminReportedPostResponse;
 import com.company.community.dto.FeedbackResponse;
+import com.company.community.dto.FeedbackStatusUpdateRequest;
 import com.company.community.dto.ReportStatsResponse;
 import com.company.community.service.AdminService;
 import com.company.community.service.FeedbackService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -58,10 +60,22 @@ public class AdminController {
     // [/FEATURE:report-dashboard]
 
     /**
-     * GET /api/admin/feedback — 건의함 전체 조회
+     * GET /api/admin/feedback?processed={bool} — 건의함 조회.
+     * processed=false(기본): 미처리만, true: 처리됨(처리 완료/수용 안 함).
      */
     @GetMapping("/feedback")
-    public ResponseEntity<List<FeedbackResponse>> feedback() {
-        return ResponseEntity.ok(feedbackService.getAll());
+    public ResponseEntity<List<FeedbackResponse>> feedback(
+            @RequestParam(defaultValue = "false") boolean processed) {
+        return ResponseEntity.ok(feedbackService.getByProcessed(processed));
+    }
+
+    /**
+     * PATCH /api/admin/feedback/{id}/status — 건의 처리 상태 변경(처리 완료/수용 안 함).
+     */
+    @PatchMapping("/feedback/{id}/status")
+    public ResponseEntity<FeedbackResponse> updateFeedbackStatus(
+            @PathVariable Long id,
+            @Valid @RequestBody FeedbackStatusUpdateRequest request) {
+        return ResponseEntity.ok(feedbackService.updateStatus(id, request.getStatus()));
     }
 }

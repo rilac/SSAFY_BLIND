@@ -29,11 +29,22 @@ public class Feedback {
     @JoinColumn(name = "author_id", nullable = false)
     private User author;
 
+    // 처리 상태 — 기본 PENDING. 관리자가 처리 완료/수용 안 함으로 바꾸면 기본 목록에서 숨겨진다.
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private FeedbackStatus status = FeedbackStatus.PENDING;
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @PrePersist
     protected void onCreate() {
         this.createdAt = LocalDateTime.now();
+    }
+
+    // 관리자 처리 상태 변경
+    public void changeStatus(FeedbackStatus status) {
+        this.status = status;
     }
 }

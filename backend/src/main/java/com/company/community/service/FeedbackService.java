@@ -1,6 +1,7 @@
 package com.company.community.service;
 
 import com.company.community.domain.Feedback;
+import com.company.community.domain.FeedbackStatus;
 import com.company.community.domain.User;
 import com.company.community.dto.FeedbackRequest;
 import com.company.community.dto.FeedbackResponse;
@@ -33,10 +34,23 @@ public class FeedbackService {
                 .build());
     }
 
+    // processed=false → 미처리(PENDING)만, true → 처리됨(RESOLVED/REJECTED). 둘 다 최신순.
     @Transactional(readOnly = true)
-    public List<FeedbackResponse> getAll() {
-        return feedbackRepository.findAllByOrderByCreatedAtDesc().stream()
+    public List<FeedbackResponse> getByProcessed(boolean processed) {
+        List<Feedback> list = processed
+                ? feedbackRepository.findByStatusNotOrderByCreatedAtDesc(FeedbackStatus.PENDING)
+                : feedbackRepository.findByStatusOrderByCreatedAtDesc(FeedbackStatus.PENDING);
+        return list.stream()
                 .map(FeedbackResponse::of)
                 .collect(Collectors.toList());
+    }
+
+    // 관리자 처리 — 상태를 변경하고 갱신된 건의를 반환(처리/수용안함 시 기본 목록에서 제외됨).
+    @Transactional
+    public FeedbackResponse updateStatus(Long id, FeedbackStatus status) {
+        Feedback feedback = feedbackRepository.findById(id)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 건의입니다."));
+        feedback.changeStatus(status);
+        return FeedbackResponse.of(feedback);
     }
 }

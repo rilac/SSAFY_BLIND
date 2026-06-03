@@ -1,6 +1,7 @@
 package com.company.community.service;
 
 import com.company.community.domain.Feedback;
+import com.company.community.domain.FeedbackStatus;
 import com.company.community.domain.User;
 import com.company.community.domain.UserRole;
 import com.company.community.domain.UserStatus;
@@ -58,15 +59,28 @@ class FeedbackServiceTest {
     }
 
     @Test
-    @DisplayName("건의 목록은 작성자 가명과 함께 반환된다")
+    @DisplayName("미처리 건의 목록은 작성자 가명과 함께 반환된다")
     void test_건의_목록() {
         Feedback fb = Feedback.builder().title("제안").content("내용").author(user()).build();
-        given(feedbackRepository.findAllByOrderByCreatedAtDesc()).willReturn(List.of(fb));
+        given(feedbackRepository.findByStatusOrderByCreatedAtDesc(FeedbackStatus.PENDING)).willReturn(List.of(fb));
 
-        List<FeedbackResponse> result = feedbackService.getAll();
+        List<FeedbackResponse> result = feedbackService.getByProcessed(false);
 
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getAuthor().getNickname()).isEqualTo("긍정적인 스타티");
+        assertThat(result.get(0).getStatus()).isEqualTo(FeedbackStatus.PENDING);
+    }
+
+    @Test
+    @DisplayName("건의 처리 상태를 변경하면 엔티티에 반영된다")
+    void test_건의_처리() {
+        Feedback fb = Feedback.builder().title("제안").content("내용").author(user()).build();
+        given(feedbackRepository.findById(1L)).willReturn(Optional.of(fb));
+
+        FeedbackResponse result = feedbackService.updateStatus(1L, FeedbackStatus.RESOLVED);
+
+        assertThat(result.getStatus()).isEqualTo(FeedbackStatus.RESOLVED);
+        assertThat(fb.getStatus()).isEqualTo(FeedbackStatus.RESOLVED);
     }
 
     private void setId(Object obj, Long id) {
