@@ -162,6 +162,17 @@ export default function PostDetailPage() {
     }
   };
 
+  // 댓글/대댓글 삭제 확인 — 게시글 삭제와 동일하게 ConfirmDialog를 거친다(즉시 삭제 방지)
+  const requestDeleteComment = (commentId) => {
+    setConfirmState({
+      title: '댓글 삭제',
+      message: '정말로 이 댓글을 삭제하시겠습니까?',
+      confirmLabel: '삭제',
+      danger: true,
+      onConfirm: () => handleDeleteComment(commentId),
+    });
+  };
+
   // [FEATURE:qna-accept] 답변 채택 토글 — QUESTION 글 작성자만(버튼은 조건부 노출), 서버가 권한 재검증
   const [acceptLoading, setAcceptLoading] = useState(null); // 토글 중인 commentId
   const handleAcceptToggle = async (commentId) => {
@@ -325,7 +336,7 @@ export default function PostDetailPage() {
             )}
             {comment.isMine && (
               <button
-                onClick={() => handleDeleteComment(comment.id)}
+                onClick={() => requestDeleteComment(comment.id)}
                 className="text-xs font-mono px-2 py-1.5 text-destructive hover:bg-muted transition-colors"
               >
                 삭제
