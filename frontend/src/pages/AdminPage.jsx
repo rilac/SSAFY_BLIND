@@ -15,6 +15,14 @@ const REASON_LABELS = {
   ETC: '기타',
 };
 
+// 클라이언트 측 페이지네이션 — 관리자 데이터는 소규모(전량 로드)라 슬라이스로 충분.
+const PAGE_SIZE = 5;
+function paginate(items, page, size = PAGE_SIZE) {
+  const pageCount = Math.max(1, Math.ceil(items.length / size));
+  const current = Math.min(Math.max(1, page), pageCount);
+  return { slice: items.slice((current - 1) * size, current * size), pageCount, current };
+}
+
 // 관리자 페이지 — 신고/숨김 게시물 검수 + 건의함. ROLE_ADMIN만 접근.
 export default function AdminPage() {
   const navigate = useNavigate();
@@ -26,6 +34,8 @@ export default function AdminPage() {
   // 커스텀 모달(M-NEW-4): 네이티브 alert/confirm 대체
   const [notice, setNotice] = useState(null); // { title?, message }
   const [confirmState, setConfirmState] = useState(null); // { ...props, onConfirm }
+  const [reportedPage, setReportedPage] = useState(1); // 페이지네이션(5/페이지, 최신/건수순)
+  const [feedbackPage, setFeedbackPage] = useState(1);
 
   useEffect(() => {
     if (!user) return;
@@ -101,6 +111,9 @@ export default function AdminPage() {
     fn?.();
   };
 
+  const reportedView = paginate(reported, reportedPage);
+  const feedbackView = paginate(feedback, feedbackPage);
+
   return (
     <div className="min-h-screen w-full bg-background text-foreground overflow-y-auto">
       <div className="max-w-4xl mx-auto p-6">
@@ -133,7 +146,7 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {reported.map((p) => (
+                  {reportedView.slice.map((p) => (
                     <div key={p.postId} className="border border-border bg-card p-5">
                       <div className="flex items-start justify-between gap-4 mb-2">
                         <h3 className="text-base font-semibold flex-1">{p.title}</h3>
@@ -186,6 +199,7 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+              <Pager page={reportedView.current} pageCount={reportedView.pageCount} onChange={setReportedPage} />
             </section>
 
             {/* 건의함 */}
@@ -197,7 +211,7 @@ export default function AdminPage() {
                 </div>
               ) : (
                 <div className="space-y-3">
-                  {feedback.map((f) => (
+                  {feedbackView.slice.map((f) => (
                     <div key={f.id} className="border border-border bg-card p-5">
                       <h3 className="text-base font-semibold mb-2">{f.title}</h3>
                       <p className="text-sm whitespace-pre-wrap mb-3">{f.content}</p>
@@ -209,6 +223,7 @@ export default function AdminPage() {
                   ))}
                 </div>
               )}
+              <Pager page={feedbackView.current} pageCount={feedbackView.pageCount} onChange={setFeedbackPage} />
             </section>
           </div>
         )}
@@ -305,3 +320,27 @@ function StatCard({ label, value }) {
   );
 }
 // [/FEATURE:report-dashboard]
+
+// 페이지네이션 컨트롤 — 이전/다음 + "현재 / 전체". 1페이지 이하면 렌더하지 않는다.
+function Pager({ page, pageCount, onChange }) {
+  if (pageCount <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-3 mt-4 text-xs font-mono">
+      <button
+        onClick={() => onChange(page - 1)}
+        disabled={page <= 1}
+        className="px-3 py-1.5 border border-border hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        이전
+      </button>
+      <span className="text-muted-foreground">{page} / {pageCount}</span>
+      <button
+        onClick={() => onChange(page + 1)}
+        disabled={page >= pageCount}
+        className="px-3 py-1.5 border border-border hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        다음
+      </button>
+    </div>
+  );
+}

@@ -46,7 +46,9 @@ public class AdminService {
                     .collect(Collectors.groupingBy(Report::getReason, Collectors.counting()));
             result.add(AdminReportedPostResponse.of(post, reports.size(), reasonCounts));
         }
-        result.sort(Comparator.comparingLong(AdminReportedPostResponse::getReportCount).reversed());
+        // 정렬: 신고 건수 많은 순, 동률은 최신순(작성일 내림차순)
+        result.sort(Comparator.comparingLong(AdminReportedPostResponse::getReportCount).reversed()
+                .thenComparing(AdminReportedPostResponse::getCreatedAt, Comparator.reverseOrder()));
         return result;
     }
 
