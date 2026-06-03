@@ -314,7 +314,7 @@ export default function PostDetailPage() {
               <button
                 onClick={() => handleAcceptToggle(comment.id)}
                 disabled={acceptLoading === comment.id}
-                className={`flex items-center gap-1 text-xs font-mono px-2 py-1.5 hover:bg-muted transition-colors disabled:opacity-50 ${
+                className={`flex items-center gap-1 text-sm font-mono px-2 py-1.5 hover:bg-muted transition-colors disabled:opacity-50 ${
                   accepted ? 'text-green-600 dark:text-green-400' : 'text-muted-foreground hover:text-foreground'
                 }`}
               >
@@ -329,7 +329,7 @@ export default function PostDetailPage() {
                   setReplyingTo(replyingTo === comment.id ? null : comment.id);
                   setReplyInput('');
                 }}
-                className="text-xs font-mono px-2 py-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                className="text-sm font-mono px-2 py-1.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
               >
                 답글
               </button>
@@ -337,14 +337,14 @@ export default function PostDetailPage() {
             {comment.isMine && (
               <button
                 onClick={() => requestDeleteComment(comment.id)}
-                className="text-xs font-mono px-2 py-1.5 text-destructive hover:bg-muted transition-colors"
+                className="text-sm font-mono px-2 py-1.5 text-destructive hover:bg-muted transition-colors"
               >
                 삭제
               </button>
             )}
           </div>
         </div>
-        <span className="text-[10px] font-mono text-muted-foreground mt-1 block">
+        <span className="text-xs font-mono text-muted-foreground mt-1 block">
           {/* [FEATURE:op-alias] 닉네임 대신 글 단위 별칭(글쓴이/익명N). 글쓴이(OP)는 강조. */}
           <span className={comment.isAuthor ? 'text-primary font-semibold' : undefined}>{comment.alias}</span>
           {/* [/FEATURE:op-alias] */}
@@ -364,7 +364,7 @@ export default function PostDetailPage() {
         {/* 본문 */}
         <article className="border border-border bg-card p-6 mb-4">
           <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
+            <div className="flex items-center gap-2 text-sm font-mono flex-wrap">
               {/* [FEATURE:pinned-posts] 공지 고정 배지 */}
               {post.pinned && (
                 <span className="flex items-center gap-1 px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold leading-none">
@@ -428,7 +428,7 @@ export default function PostDetailPage() {
 
           <h1 className="text-xl font-semibold mb-3">{post.title}</h1>
 
-          <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground mb-5">
+          <div className="flex items-center gap-3 text-sm font-mono text-muted-foreground mb-5">
             <span className="flex items-center gap-1.5">
               <Eye size={14} />
               {formatNumber(post.viewCount)}
