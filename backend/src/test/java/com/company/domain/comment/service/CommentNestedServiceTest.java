@@ -2,6 +2,7 @@ package com.company.domain.comment.service;
 
 import com.company.domain.comment.controller.dto.CommentCreateRequest;
 import com.company.domain.comment.entity.Comment;
+import com.company.domain.comment.repository.CommentLikeRepository;
 import com.company.domain.comment.repository.CommentRepository;
 import com.company.domain.notification.service.NotificationService;
 import com.company.domain.post.entity.Post;
@@ -39,6 +40,7 @@ import static org.mockito.Mockito.verify;
 class CommentNestedServiceTest {
 
     @Mock private CommentRepository commentRepository;
+    @Mock private CommentLikeRepository commentLikeRepository; // [FEATURE:comment-likes]
     @Mock private PostRepository postRepository;
     @Mock private UserRepository userRepository;
     @Mock private NotificationService notificationService;

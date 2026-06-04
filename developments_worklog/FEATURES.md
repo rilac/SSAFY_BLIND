@@ -465,3 +465,32 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 **롤백 절차**
 1. `[FEATURE:category-descriptions]` 마커 제거: `viewDescription` 함수와 헤더의 설명 `<span>` 제거, 헤더를 기존 `flex items-center justify-between`(제목 + SEARCH 배지)로 환원.
 2. 신규 파일 없음. 백엔드/스키마 무변경.
+
+---
+
+## comment-likes — 댓글 좋아요(단일) (2026-06-04)
+
+§6. 댓글에 좋아요. 게시글의 4종 반응과 달리 **종류 없이 좋아요 하나로 통일**(요청대로). 따봉(ThumbsUp) 아이콘 + 좋아요 시 primary 색 테두리. **백엔드 + 프론트엔드**, Flyway **V11**. (도메인 패키지 재편 후 작업 — 경로는 `com.company.domain.comment.*`)
+
+**범위/동작**
+- 데이터: `comment_likes`(comment_id, user_id, **unique(comment_id,user_id)**=1인 1좋아요) — **Flyway V11**(post_likes 스타일, 컬럼/타입은 `CommentLike` 엔티티와 일치 → validate 통과). FK comment_id→comments, user_id→users.
+- 토글: `POST /api/posts/{postId}/comments/{commentId}/like` — 처음=추가, 재요청=취소. 응답 `{ "liked": bool, "likeCount": n }`. 동시 첫 좋아요는 유니크로 1회(`DataIntegrityViolationException` 흡수).
+- 응답: `CommentResponse.likeCount` + `isLiked`. `getComments`가 `countByCommentIds`+`findLikedCommentIds` **배치 조회**(N+1 방지). 새 댓글(addComment)은 0·false.
+- 정리: 댓글 삭제 시 그 댓글+답글(1-depth)의 좋아요를 먼저 삭제(`deleteByCommentId`/`deleteByCommentParentId`, FK 위반 방지). 글 삭제 시 `PostService.deletePost`가 `commentLikeRepository.deleteByPostId`로 그 글의 모든 댓글 좋아요를 comment cascade 전에 정리.
+- UI: `PostDetailPage` `renderComment`에 좋아요 버튼(따봉, 좋아요 시 `border-primary text-primary`+채운 아이콘, 미좋아요 `border-border`) + 개수. 최상위/답글 공용.
+
+**알려진 동작/한계**: ① 단일 좋아요만(반응 종류 없음 — 사용자 결정). ② 좋아요 알림 없음(게시글 반응은 작성자 알림 있으나 댓글 좋아요는 미구현 — 후속 후보). ③ H2 테스트는 flyway off(create-drop)라 V11 무관, 실 MySQL은 bootRun에서 적용.
+
+**마커 위치 (`[FEATURE:comment-likes]`)**
+- (신규) 백엔드: `domain/comment/entity/CommentLike.java`, `domain/comment/repository/CommentLikeRepository.java`, `domain/comment/controller/dto/CommentLikeResponse.java`, `resources/db/migration/V11__add_comment_likes.sql`.
+- 백엔드(수정): `comment/controller/dto/CommentResponse.java`(likeCount/isLiked + factory), `comment/controller/CommentController.java`(/like 엔드포인트), `comment/service/CommentService.java`(CommentLikeRepository 주입, getComments 배치, addComment 0·false, deleteComment 정리, `toggleLike`), `post/service/PostService.java`(CommentLikeRepository 주입 + deletePost 정리). 테스트: `CommentServiceTest`(토글 1종) + 4개 테스트(Comment*ServiceTest·PostServiceTest·PostDeletionIntegrationTest)에 CommentLikeRepository 목/주입 추가.
+- 프론트: `pages/PostDetailPage.jsx`(`ThumbsUp` import, `handleCommentLike`/`likeLoadingId`, renderComment 좋아요 버튼).
+
+**롤백 절차**
+1. `[FEATURE:comment-likes]` 마커 블록 제거.
+   - `CommentResponse`: likeCount/isLiked 필드 + factory 인자 제거(호출부 2곳 5-인자로 환원). `CommentService`: CommentLikeRepository 주입·getComments 배치·deleteComment 정리·`toggleLike` 제거. `CommentController` /like 제거. `PostService` CommentLikeRepository 주입 + deletePost 정리 제거.
+   - 테스트: 5개 테스트의 CommentLikeRepository 목/주입(+PostDeletionIntegrationTest 생성자 인자) 환원, `CommentServiceTest` 토글 테스트 제거.
+   - `PostDetailPage`: 좋아요 버튼·핸들러·`ThumbsUp` import 제거.
+2. 신규 파일 4종 삭제. DB(V11 적용): `drop table comment_likes;`
+
+**미적용(후속 후보)**: 댓글 좋아요 알림(작성자에게), 좋아요한 사람 수만 표시→목록(익명 유지), 답글 좋아요 별도 정책.

@@ -2,8 +2,11 @@ package com.company.domain.comment.service;
 
 import com.company.domain.comment.controller.dto.AcceptAnswerResponse;
 import com.company.domain.comment.controller.dto.CommentCreateRequest;
+import com.company.domain.comment.controller.dto.CommentLikeResponse;
 import com.company.domain.comment.controller.dto.CommentResponse;
 import com.company.domain.comment.entity.Comment;
+import com.company.domain.comment.entity.CommentLike;
+import com.company.domain.comment.repository.CommentLikeRepository;
 import com.company.domain.comment.repository.CommentRepository;
 import com.company.domain.notification.service.NotificationService;
 import com.company.domain.post.entity.Post;
@@ -16,13 +19,17 @@ import com.company.global.exception.ForbiddenException;
 import com.company.global.exception.InvalidStateException;
 
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -30,6 +37,7 @@ import java.util.stream.Collectors;
 public class CommentService {
 
     private final CommentRepository commentRepository;
+    private final CommentLikeRepository commentLikeRepository; // [FEATURE:comment-likes]
     private final PostRepository postRepository;
     private final UserRepository userRepository;
     private final NotificationService notificationService; // 댓글 알림
@@ -86,7 +94,8 @@ public class CommentService {
         Long postAuthorId = post.getAuthor().getId();
         Map<Long, String> aliasByUser =
                 buildAliasMap(postAuthorId, commentRepository.findAllByPostIdOrderByCreatedAtAsc(postId));
-        return CommentResponse.of(saved, userId, author, aliasByUser.get(userId), userId.equals(postAuthorId));
+        // [FEATURE:comment-likes] 새 댓글은 좋아요 0·미좋아요
+        return CommentResponse.of(saved, userId, author, aliasByUser.get(userId), userId.equals(postAuthorId), 0L, false);
         // [/FEATURE:op-alias]
     }
 
@@ -114,11 +123,24 @@ public class CommentService {
 
         // [FEATURE:op-alias] 글 단위 일관 별칭 맵(글쓴이/익명N) — 댓글마다 동일 유저는 동일 별칭.
         Map<Long, String> aliasByUser = buildAliasMap(postAuthorId, comments);
+
+        // [FEATURE:comment-likes] 좋아요 수 + 내 좋아요 여부 배치 조회(N+1 방지)
+        List<Long> commentIds = comments.stream().map(Comment::getId).collect(Collectors.toList());
+        Map<Long, Long> likeCountMap = new HashMap<>();
+        Set<Long> likedSet = new HashSet<>();
+        if (!commentIds.isEmpty()) {
+            commentLikeRepository.countByCommentIds(commentIds)
+                    .forEach(r -> likeCountMap.put((Long) r[0], (Long) r[1]));
+            likedSet.addAll(commentLikeRepository.findLikedCommentIds(commentIds, currentUserId));
+        }
+        // [/FEATURE:comment-likes]
+
         return comments.stream()
                 .map(c -> {
                     Long uid = c.getAuthor().getId();
                     return CommentResponse.of(c, currentUserId, authorMap.get(uid),
-                            aliasByUser.get(uid), uid.equals(postAuthorId));
+                            aliasByUser.get(uid), uid.equals(postAuthorId),
+                            likeCountMap.getOrDefault(c.getId(), 0L), likedSet.contains(c.getId())); // [FEATURE:comment-likes]
                 })
                 .collect(Collectors.toList());
         // [/FEATURE:op-alias]
@@ -170,12 +192,48 @@ public class CommentService {
         }
         // [/FEATURE:qna-accept]
 
+        // [FEATURE:comment-likes] 좋아요(comment_id FK)를 댓글 삭제 전에 정리 — 답글들의 좋아요 + 이 댓글의 좋아요.
+        commentLikeRepository.deleteByCommentParentId(commentId);
+        commentLikeRepository.deleteByCommentId(commentId);
+        // [/FEATURE:comment-likes]
+
         // [FEATURE:nested-comments] 최상위 댓글 삭제 시 그 답글도 함께 정리(1-depth). 답글이면 자식이 없어 no-op.
         commentRepository.deleteByParentId(commentId);
         // [/FEATURE:nested-comments]
 
         commentRepository.delete(comment);
     }
+
+    // [FEATURE:comment-likes] 댓글 좋아요 토글 — 처음=추가, 재요청=취소. (comment_id,user_id) 유니크로 1인 1좋아요.
+    @Transactional
+    public CommentLikeResponse toggleLike(Long userId, Long postId, Long commentId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
+        Comment comment = commentRepository.findById(commentId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 댓글입니다."));
+        if (!comment.getPost().getId().equals(postId)) {
+            throw new NoSuchElementException("해당 게시글의 댓글이 아닙니다.");
+        }
+
+        Optional<CommentLike> existing = commentLikeRepository.findByCommentIdAndUserId(commentId, userId);
+        boolean liked;
+        if (existing.isPresent()) {
+            commentLikeRepository.delete(existing.get());
+            liked = false;
+        } else {
+            try {
+                commentLikeRepository.save(CommentLike.builder().comment(comment).user(user).build());
+                liked = true;
+            } catch (DataIntegrityViolationException e) {
+                liked = true; // 동시 첫 좋아요 경합 — 유니크로 1회만
+            }
+        }
+
+        long count = commentLikeRepository.countByCommentIds(List.of(commentId)).stream()
+                .findFirst().map(r -> (Long) r[1]).orElse(0L);
+        return new CommentLikeResponse(liked, count);
+    }
+    // [/FEATURE:comment-likes]
 
     // [FEATURE:qna-accept] 답변 채택 토글 — QUESTION 글 + 질문 작성자만. 같은 답변 재요청 시 해제.
     @Transactional

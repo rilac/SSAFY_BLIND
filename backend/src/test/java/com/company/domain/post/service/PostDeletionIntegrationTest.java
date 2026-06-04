@@ -1,5 +1,6 @@
 package com.company.domain.post.service;
 
+import com.company.domain.comment.repository.CommentLikeRepository;
 import com.company.domain.comment.repository.CommentRepository;
 import com.company.domain.notification.repository.NotificationRepository;
 import com.company.domain.notification.service.NotificationService;
@@ -58,6 +59,7 @@ class PostDeletionIntegrationTest {
     @Autowired private UserRepository userRepository;
     @Autowired private PostLikeRepository postLikeRepository;
     @Autowired private CommentRepository commentRepository;
+    @Autowired private CommentLikeRepository commentLikeRepository; // [FEATURE:comment-likes]
     @Autowired private BookmarkRepository bookmarkRepository;
     @Autowired private ReportRepository reportRepository;
     @Autowired private NotificationRepository notificationRepository;
@@ -75,7 +77,7 @@ class PostDeletionIntegrationTest {
         PollService pollService = new PollService(
                 pollOptionRepository, pollVoteRepository, postRepository, userRepository);
         postService = new PostService(
-                postRepository, userRepository, postLikeRepository, commentRepository,
+                postRepository, userRepository, postLikeRepository, commentRepository, commentLikeRepository,
                 bookmarkRepository, reportRepository, notificationRepository, postViewRepository,
                 Mockito.mock(NotificationService.class), pollService);
     }

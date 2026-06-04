@@ -1,5 +1,6 @@
 package com.company.domain.post.service;
 
+import com.company.domain.comment.repository.CommentLikeRepository;
 import com.company.domain.comment.repository.CommentRepository;
 import com.company.domain.notification.repository.NotificationRepository;
 import com.company.domain.notification.service.NotificationService;
@@ -66,6 +67,9 @@ class PostServiceTest {
 
     @Mock
     private CommentRepository commentRepository;
+
+    @Mock
+    private CommentLikeRepository commentLikeRepository; // [FEATURE:comment-likes]
 
     @Mock
     private BookmarkRepository bookmarkRepository;

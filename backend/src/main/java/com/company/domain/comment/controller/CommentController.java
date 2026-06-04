@@ -2,6 +2,7 @@ package com.company.domain.comment.controller;
 
 import com.company.domain.comment.controller.dto.AcceptAnswerResponse;
 import com.company.domain.comment.controller.dto.CommentCreateRequest;
+import com.company.domain.comment.controller.dto.CommentLikeResponse;
 import com.company.domain.comment.controller.dto.CommentResponse;
 import com.company.domain.comment.service.CommentService;
 import com.company.domain.user.entity.User;
@@ -75,4 +76,18 @@ public class CommentController {
         return ResponseEntity.ok(commentService.toggleAcceptAnswer(user.getId(), postId, commentId));
     }
     // [/FEATURE:qna-accept]
+
+    /**
+     * [FEATURE:comment-likes] POST /api/posts/{postId}/comments/{commentId}/like — 좋아요 토글.
+     * 응답 { "liked": bool, "likeCount": n }.
+     */
+    @PostMapping("/{commentId}/like")
+    public ResponseEntity<CommentLikeResponse> likeComment(
+            @AuthenticationPrincipal User user,
+            @PathVariable Long postId,
+            @PathVariable Long commentId) {
+
+        return ResponseEntity.ok(commentService.toggleLike(user.getId(), postId, commentId));
+    }
+    // [/FEATURE:comment-likes]
 }

@@ -1,5 +1,6 @@
 package com.company.domain.post.service;
 
+import com.company.domain.comment.repository.CommentLikeRepository;
 import com.company.domain.comment.repository.CommentRepository;
 import com.company.domain.notification.repository.NotificationRepository;
 import com.company.domain.notification.service.NotificationService;
@@ -46,6 +47,7 @@ public class PostService {
     private final UserRepository userRepository;
     private final PostLikeRepository postLikeRepository; // (#4)
     private final CommentRepository commentRepository;   // 댓글 수 배치 집계
+    private final CommentLikeRepository commentLikeRepository; // [FEATURE:comment-likes] 글 삭제 시 댓글 좋아요 정리
     private final BookmarkRepository bookmarkRepository;  // 스크랩
     private final ReportRepository reportRepository;       // C-NEW-1: 삭제 시 신고 정리
     private final NotificationRepository notificationRepository; // C-NEW-1: 삭제 시 알림 정리
@@ -260,6 +262,7 @@ public class PostService {
         postLikeRepository.deleteByPostId(postId);
         bookmarkRepository.deleteByPostId(postId);
         postViewRepository.deleteByPostId(postId); // M-NEW-5: 조회 이력도 post_id FK → 함께 정리
+        commentLikeRepository.deleteByPostId(postId); // [FEATURE:comment-likes] 댓글 좋아요도 comment cascade 삭제 전에 정리(FK)
         pollService.deleteForPost(postId); // [FEATURE:poll] 투표 표·보기도 post_id FK → 함께 정리
         // 알림은 FK는 아니지만 죽은 링크가 남으므로 함께 정리(M-NEW-3).
         notificationRepository.deleteByPostId(postId);

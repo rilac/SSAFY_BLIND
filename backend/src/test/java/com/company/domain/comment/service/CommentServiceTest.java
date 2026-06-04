@@ -1,7 +1,10 @@
 package com.company.domain.comment.service;
 
 import com.company.domain.comment.controller.dto.AcceptAnswerResponse;
+import com.company.domain.comment.controller.dto.CommentLikeResponse;
 import com.company.domain.comment.entity.Comment;
+import com.company.domain.comment.entity.CommentLike;
+import com.company.domain.comment.repository.CommentLikeRepository;
 import com.company.domain.comment.repository.CommentRepository;
 import com.company.domain.notification.service.NotificationService;
 import com.company.domain.post.entity.Post;
@@ -21,11 +24,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -35,6 +40,7 @@ import static org.mockito.Mockito.verify;
 class CommentServiceTest {
 
     @Mock private CommentRepository commentRepository;
+    @Mock private CommentLikeRepository commentLikeRepository; // [FEATURE:comment-likes]
     @Mock private PostRepository postRepository;
     @Mock private UserRepository userRepository;
     @Mock private NotificationService notificationService;
@@ -57,6 +63,26 @@ class CommentServiceTest {
         Comment c = Comment.builder().content("answer").post(post).author(author).build();
         setId(c, id);
         return c;
+    }
+
+    // [FEATURE:comment-likes] 좋아요 토글 — 처음 누르면 추가되고 새 상태/개수를 반환한다.
+    @Test
+    @DisplayName("댓글 좋아요 토글: 처음 누르면 추가되고 likeCount를 반환한다")
+    void test_댓글_좋아요_추가() {
+        User u = user(1L);
+        Post p = post(10L, user(2L), PostCategory.FREE);
+        Comment c = comment(100L, p, user(2L));
+        given(userRepository.findById(1L)).willReturn(Optional.of(u));
+        given(commentRepository.findById(100L)).willReturn(Optional.of(c));
+        given(commentLikeRepository.findByCommentIdAndUserId(100L, 1L)).willReturn(Optional.empty());
+        given(commentLikeRepository.countByCommentIds(List.of(100L)))
+                .willReturn(List.<Object[]>of(new Object[]{100L, 1L}));
+
+        CommentLikeResponse res = commentService.toggleLike(1L, 10L, 100L);
+
+        assertThat(res.isLiked()).isTrue();
+        assertThat(res.getLikeCount()).isEqualTo(1L);
+        verify(commentLikeRepository).save(any(CommentLike.class));
     }
 
     @Test

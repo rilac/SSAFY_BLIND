@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bookmark, Flag, Eye, EyeOff, Pencil, Trash2, CheckCircle2, BarChart3, Check, Pin, MessageSquare, FileX2 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll] · Pin: [FEATURE:pinned-posts] · EyeOff: 관리자 숨김 · MessageSquare/FileX2: 빈/오류 상태 글리프
+import { ArrowLeft, Bookmark, Flag, Eye, EyeOff, Pencil, Trash2, CheckCircle2, BarChart3, Check, Pin, MessageSquare, FileX2, ThumbsUp } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll] · Pin: [FEATURE:pinned-posts] · EyeOff: 관리자 숨김 · ThumbsUp: [FEATURE:comment-likes] 댓글 좋아요 · MessageSquare/FileX2: 빈/오류 상태 글리프
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext'; // [FEATURE:pinned-posts] 관리자 여부 판별
 import ReportModal from '../components/ReportModal';
@@ -210,6 +210,23 @@ export default function PostDetailPage() {
   };
   // [/FEATURE:nested-comments]
 
+  // [FEATURE:comment-likes] 댓글 좋아요 토글 — 서버가 {liked, likeCount} 반환, 해당 댓글만 갱신.
+  const [likeLoadingId, setLikeLoadingId] = useState(null);
+  const handleCommentLike = async (commentId) => {
+    if (likeLoadingId) return;
+    setLikeLoadingId(commentId);
+    try {
+      const res = await api.post(`/posts/${id}/comments/${commentId}/like`);
+      setComments((prev) =>
+        prev.map((c) => (c.id === commentId ? { ...c, isLiked: res.data.liked, likeCount: res.data.likeCount } : c)));
+    } catch {
+      setNotice({ title: '좋아요 실패', message: '좋아요 처리에 실패했습니다.' });
+    } finally {
+      setLikeLoadingId(null);
+    }
+  };
+  // [/FEATURE:comment-likes]
+
   // [FEATURE:poll] 익명 투표 — 토글(같은 보기 재클릭=취소). 서버가 집계만 반환(누가 골랐는지는 미노출).
   const [voteLoading, setVoteLoading] = useState(false);
   const handleVote = async (optionId) => {
@@ -330,6 +347,21 @@ export default function PostDetailPage() {
         <div className="flex items-start justify-between gap-2">
           <p className="text-sm flex-1">{comment.content}</p>
           <div className="flex items-center gap-1 shrink-0">
+            {/* [FEATURE:comment-likes] 좋아요(따봉) — 색 테두리 토글. 좋아요 시 primary 테두리+채운 따봉 */}
+            <button
+              onClick={() => handleCommentLike(comment.id)}
+              disabled={likeLoadingId === comment.id}
+              title="좋아요"
+              className={`flex items-center gap-1 text-sm font-mono px-2 py-1.5 border transition-colors disabled:opacity-50 ${
+                comment.isLiked
+                  ? 'border-primary text-primary'
+                  : 'border-border text-muted-foreground hover:border-primary hover:text-foreground'
+              }`}
+            >
+              <ThumbsUp size={12} fill={comment.isLiked ? 'currentColor' : 'none'} />
+              {comment.likeCount > 0 && <span>{comment.likeCount}</span>}
+            </button>
+            {/* [/FEATURE:comment-likes] */}
             {/* [FEATURE:qna-accept] 질문 작성자만 채택 토글(최상위 답변 한정) */}
             {canAccept && (
               <button

@@ -37,10 +37,17 @@ public class CommentResponse {
     private Long parentId;
     // [/FEATURE:nested-comments]
 
+    // [FEATURE:comment-likes] 댓글 좋아요 수 + 현재 유저의 좋아요 여부.
+    private long likeCount;
+    @JsonProperty("isLiked")
+    private boolean isLiked;
+    // [/FEATURE:comment-likes]
+
     // author는 호출부에서 배치 조회한 작성자 User를 전달받는다.
     // [FEATURE:op-alias] alias(글쓴이/익명N) + isAuthor(글쓴이 여부)는 호출부(CommentService)에서 글 단위로 계산해 전달.
     public static CommentResponse of(Comment comment, Long currentUserId, User author,
-                                     String alias, boolean isAuthor) {
+                                     String alias, boolean isAuthor,
+                                     long likeCount, boolean isLiked) { // [FEATURE:comment-likes]
         return new CommentResponse(
                 comment.getId(),
                 comment.getContent(),
@@ -49,7 +56,8 @@ public class CommentResponse {
                 comment.getAuthor().getId().equals(currentUserId),
                 alias,
                 isAuthor,
-                comment.getParentId() // [FEATURE:nested-comments]
+                comment.getParentId(), // [FEATURE:nested-comments]
+                likeCount, isLiked // [FEATURE:comment-likes]
         );
     }
     // [/FEATURE:op-alias]
