@@ -4,7 +4,10 @@ package com.company.community.domain;
 public enum PostCategory {
     FREE("자유게시판"),
     JOB("취업/이직"),
-    QUESTION("질문");
+    QUESTION("질문"),
+    // [FEATURE:food-board] 맛집 공유 게시판 — EnumType.STRING 저장이라 DB 마이그레이션 불필요.
+    FOOD("맛집 공유");
+    // [/FEATURE:food-board]
 
     private final String label;
 

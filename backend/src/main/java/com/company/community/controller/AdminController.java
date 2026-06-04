@@ -41,6 +41,16 @@ public class AdminController {
     }
 
     /**
+     * [FEATURE:admin-moderation] POST /api/admin/posts/{id}/hide — 관리자 선제적 숨김. 응답 { "hidden": true }(새 상태).
+     */
+    @PostMapping("/posts/{id}/hide")
+    public ResponseEntity<Map<String, Boolean>> hide(@PathVariable Long id) {
+        adminService.hidePost(id);
+        return ResponseEntity.ok(Map.of("hidden", true));
+    }
+    // [/FEATURE:admin-moderation]
+
+    /**
      * [FEATURE:pinned-posts] POST /api/admin/posts/{id}/pin — 공지 고정 토글. 응답 { "pinned": bool }(새 상태).
      */
     @PostMapping("/posts/{id}/pin")

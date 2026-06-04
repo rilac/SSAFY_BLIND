@@ -60,6 +60,16 @@ public class AdminService {
         post.restore();
     }
 
+    // [FEATURE:admin-moderation] 관리자 선제적 숨김 — 신고 임계값(ReportService) 자동 숨김과 달리, 임의 글을 즉시 숨긴다.
+    // 복원은 기존 restorePost(hidden=false, reviewed=true) 재사용.
+    @Transactional
+    public void hidePost(Long postId) {
+        Post post = postRepository.findById(postId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+        post.hide();
+    }
+    // [/FEATURE:admin-moderation]
+
     // [FEATURE:pinned-posts] 공지 고정 토글 — 관리자만(컨트롤러 /api/admin/** = ROLE_ADMIN). 토글 후 새 고정 상태 반환.
     @Transactional
     public boolean togglePin(Long postId) {

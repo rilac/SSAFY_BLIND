@@ -21,10 +21,12 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.NoSuchElementException;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
@@ -76,6 +78,27 @@ class AdminServiceTest {
         assertThat(post.isHidden()).isFalse();
         assertThat(post.isReviewed()).isTrue();
     }
+
+    // [FEATURE:admin-moderation] 관리자 선제적 숨김 — 성공 + 없는 글 예외.
+    @Test
+    @DisplayName("관리자 선제적 숨김은 hidden=true로 만든다")
+    void test_관리자_숨김() {
+        given(postRepository.findById(10L)).willReturn(Optional.of(post));
+
+        adminService.hidePost(10L);
+
+        assertThat(post.isHidden()).isTrue();
+    }
+
+    @Test
+    @DisplayName("존재하지 않는 글 숨김은 NoSuchElementException")
+    void test_관리자_숨김_없는글() {
+        given(postRepository.findById(99L)).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> adminService.hidePost(99L))
+                .isInstanceOf(NoSuchElementException.class);
+    }
+    // [/FEATURE:admin-moderation]
 
     // [FEATURE:report-dashboard] 신고 통계 — 사유별 집계 + 신고 글 상태 + 일별 추이.
     @Test

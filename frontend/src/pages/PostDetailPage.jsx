@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Bookmark, Flag, Eye, Pencil, Trash2, CheckCircle2, BarChart3, Check, Pin, MessageSquare, FileX2 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll] · Pin: [FEATURE:pinned-posts] · MessageSquare/FileX2: 빈/오류 상태 글리프
+import { ArrowLeft, Bookmark, Flag, Eye, EyeOff, Pencil, Trash2, CheckCircle2, BarChart3, Check, Pin, MessageSquare, FileX2 } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3/Check: [FEATURE:poll] · Pin: [FEATURE:pinned-posts] · EyeOff: 관리자 숨김 · MessageSquare/FileX2: 빈/오류 상태 글리프
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext'; // [FEATURE:pinned-posts] 관리자 여부 판별
 import ReportModal from '../components/ReportModal';
@@ -242,6 +242,27 @@ export default function PostDetailPage() {
   };
   // [/FEATURE:pinned-posts]
 
+  // [FEATURE:admin-moderation] 관리자 숨김/숨김 해제 토글 — post.hidden에 따라 hide/restore 호출, 서버 반영 후 로컬 post 갱신.
+  const [hideLoading, setHideLoading] = useState(false);
+  const handleToggleHide = async () => {
+    if (hideLoading) return;
+    setHideLoading(true);
+    try {
+      if (post.hidden) {
+        await api.post(`/admin/posts/${id}/restore`);
+        setPost((prev) => ({ ...prev, hidden: false }));
+      } else {
+        await api.post(`/admin/posts/${id}/hide`);
+        setPost((prev) => ({ ...prev, hidden: true }));
+      }
+    } catch {
+      setNotice({ title: '처리 실패', message: '숨김 처리에 실패했습니다.' });
+    } finally {
+      setHideLoading(false);
+    }
+  };
+  // [/FEATURE:admin-moderation]
+
   const backBtn = (
     <button
       onClick={() => navigate('/feed')}
@@ -334,7 +355,8 @@ export default function PostDetailPage() {
                 답글
               </button>
             )}
-            {comment.isMine && (
+            {/* [FEATURE:admin-moderation] 삭제 — 본인 댓글 또는 관리자(타인 댓글 모더레이션). 백엔드 deleteComment가 ADMIN 허용 */}
+            {(comment.isMine || isAdmin) && (
               <button
                 onClick={() => requestDeleteComment(comment.id)}
                 className="text-sm font-mono px-2 py-1.5 text-destructive hover:bg-muted transition-colors"
@@ -342,6 +364,7 @@ export default function PostDetailPage() {
                 삭제
               </button>
             )}
+            {/* [/FEATURE:admin-moderation] */}
           </div>
         </div>
         <span className="text-xs font-mono text-muted-foreground mt-1 block">
@@ -404,27 +427,51 @@ export default function PostDetailPage() {
                   </button>
                 )}
                 {/* [/FEATURE:pinned-posts] */}
-                {post.isMine && (
-                  <>
-                    <button
-                      onClick={() => navigate(`/posts/${id}/edit`)}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
-                    >
-                      <Pencil size={12} />
-                      수정
-                    </button>
-                    <button
-                      onClick={requestDelete}
-                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity"
-                    >
-                      <Trash2 size={12} />
-                      삭제
-                    </button>
-                  </>
+                {/* [FEATURE:admin-moderation] 관리자 숨김/숨김 해제 — 본인 글 여부와 무관, 관리자에게만 노출 */}
+                {isAdmin && (
+                  <button
+                    onClick={handleToggleHide}
+                    disabled={hideLoading}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border transition-colors disabled:opacity-50 ${
+                      post.hidden
+                        ? 'border-primary text-primary'
+                        : 'border-border hover:border-primary'
+                    }`}
+                  >
+                    <EyeOff size={12} />
+                    {post.hidden ? '숨김 해제' : '숨김'}
+                  </button>
                 )}
+                {/* [/FEATURE:admin-moderation] */}
+                {post.isMine && (
+                  <button
+                    onClick={() => navigate(`/posts/${id}/edit`)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
+                  >
+                    <Pencil size={12} />
+                    수정
+                  </button>
+                )}
+                {/* [FEATURE:admin-moderation] 삭제 — 본인 또는 관리자(타인 글 모더레이션). 백엔드 deletePost가 ADMIN 허용 */}
+                <button
+                  onClick={requestDelete}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity"
+                >
+                  <Trash2 size={12} />
+                  삭제
+                </button>
               </div>
             )}
           </div>
+
+          {/* [FEATURE:admin-moderation] 관리자에게만: 숨김 상태 안내(일반 사용자에겐 이 글 자체가 비노출) */}
+          {isAdmin && post.hidden && (
+            <div className="flex items-center gap-2 mb-3 px-3 py-2 border border-destructive text-destructive text-xs font-mono">
+              <EyeOff size={14} />
+              이 글은 숨김 상태입니다 — 일반 사용자에게 보이지 않습니다.
+            </div>
+          )}
+          {/* [/FEATURE:admin-moderation] */}
 
           <h1 className="text-xl font-semibold mb-3">{post.title}</h1>
 

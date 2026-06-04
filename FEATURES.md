@@ -334,3 +334,67 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 3. DB/마이그레이션 변경 없음.
 
 **미적용(후속 후보)**: 추이 윈도/기간 선택(7·30·90일), 처리 상태 컬럼·SLA, 신고자/대상자 랭킹, 통계 캐시·집계 테이블, CSV 내보내기, 차트 라이브러리 도입.
+
+---
+
+## food-board — 맛집 공유 게시판 (2026-06-04)
+
+§6. 카테고리 한 종(맛집 공유) 추가. **스키마 변경 없음**(`PostCategory`는 `@Enumerated(EnumType.STRING)`이라 enum 값만 추가하면 됨 → Flyway 불필요). 백엔드(enum) + 프론트(라벨/사이드바).
+
+**범위/동작**
+- `PostCategory.FOOD("맛집 공유")` 추가. 기존 필터/정렬/검색/라운지와 직교 결합(별도 분기 없음 — `getCategory()` 비교 외 exhaustive switch 없음).
+- 프론트: `categories.js`(`CATEGORY_LABELS.FOOD`·`POST_CATEGORIES`), `Sidebar` 카테고리 항목(`Utensils` 아이콘). 작성/수정 폼(`PostForm`)은 `POST_CATEGORIES`를 map하므로 자동 노출. 카드/상세 배지는 `categoryLabel()` 사용이라 자동.
+
+**마커 위치 (`[FEATURE:food-board]`)**
+- 백엔드: `domain/PostCategory.java`(`FOOD` enum 값).
+- 프론트: `lib/categories.js`(라벨+목록), `components/Sidebar.jsx`(`Utensils` import + `categoryItems` 항목).
+
+**롤백 절차**
+1. `[FEATURE:food-board]` 마커 제거: `PostCategory.FOOD` 값, `categories.js`의 `FOOD` 라벨·`POST_CATEGORIES`의 `'FOOD'`, `Sidebar`의 `Utensils` import·`categoryItems` 항목.
+2. DB: 기존 `posts.category`에 `'FOOD'` 행이 있으면 다른 카테고리로 이전/삭제 후 enum 제거(없으면 불필요). 스키마/마이그레이션 변경 없음.
+
+**미적용(후속 후보)**: 맛집 전용 메타(지역/별점/지도 링크), 카테고리별 공지, 카테고리 동적 관리(현재 enum 하드코딩).
+
+---
+
+## admin-moderation — 관리자 강제 숨김/삭제 (2026-06-04)
+
+§6-1 모더레이션. 관리자가 **타인 글/댓글을 삭제**하고 **임의 글을 선제적으로 숨김/해제**. 삭제 권한 자체는 기존(`PostService.deletePost`/`CommentService.deleteComment`가 ADMIN 허용)이라, 본 작업은 **선제 숨김 엔드포인트 + 프론트 버튼 노출**이 핵심. **백엔드 + 프론트엔드, 스키마 변경 없음**(기존 `posts.hidden`/`hide()`/`restore()` 재사용).
+
+**범위/동작**
+- 숨김: `POST /api/admin/posts/{id}/hide`(ROLE_ADMIN) → `AdminService.hidePost` → `Post.hide()`. 응답 `{ "hidden": true }`. 신고 5건 자동 숨김(`ReportService`)과 달리 임계값 무관 즉시 숨김. 해제는 기존 `POST /api/admin/posts/{id}/restore`(`restore()` → hidden=false, reviewed=true) 재사용.
+- 숨김 글은 일반 피드 비노출(`PostRepository` `hidden=false` 필터)·상세는 ADMIN만 열람(`getPost`). 댓글 숨김은 미도입(삭제로 충분 — 사용자 결정).
+- 응답: `PostResponse.hidden` 추가(상세 토글/배지용, ADMIN만 숨김 글을 보므로 노출 안전). factory에서 `post.isHidden()` 직접 읽어 PostService 호출부 무변경(pinned 패턴과 동일).
+- UI(`PostDetailPage`): 헤더 액션에 **숨김/숨김 해제** 토글(관리자 전용, `EyeOff`) + **삭제** 버튼을 `post.isMine || isAdmin`으로 확장(수정은 작성자 전용 유지 — 서버가 비작성자 수정 거부). 숨김 상태일 때 본문 상단 "숨김 상태" 안내 배너(ADMIN만). 댓글 삭제 버튼도 `comment.isMine || isAdmin`로 확장.
+
+**알려진 동작/한계**: ① 수동 숨김 글은 신고 글이 아니면 `AdminPage` 신고 목록에 안 뜸(상세에서 해제) — `AdminPage`는 신고 글만 나열. ② 댓글은 삭제만(숨김 없음). ③ 감사 로그/소프트 삭제 없음(영구 삭제 — 기존 동작). ④ 피드 카드엔 모더레이션 버튼 미노출(상세 + AdminPage로 충분).
+
+**마커 위치 (`[FEATURE:admin-moderation]`)**
+- 백엔드: `service/AdminService.java`(`hidePost`), `controller/AdminController.java`(`POST /posts/{id}/hide`), `dto/PostResponse.java`(`hidden` 필드 + factory `post.isHidden()` 인자). 테스트: `AdminServiceTest`(숨김 성공/없는 글 2종, 마커 블록).
+- 프론트: `pages/PostDetailPage.jsx`(`EyeOff` import, `handleToggleHide`/`hideLoading`, 숨김 토글 버튼, 삭제 버튼 `isAdmin` 확장, 숨김 상태 배너, 댓글 삭제 `isAdmin` 확장).
+
+**롤백 절차**
+1. `[FEATURE:admin-moderation]` 마커 블록 제거.
+   - `AdminController` hide 엔드포인트, `AdminService.hidePost`, `PostResponse.hidden` 필드 + factory 인자 제거(`AllArgsConstructor` 인자 1개 환원). `AdminServiceTest` 숨김 블록 제거.
+   - `PostDetailPage`: `handleToggleHide`/`hideLoading`·숨김 버튼·숨김 배너 제거, 삭제 버튼을 다시 `post.isMine` 프래그먼트 안으로, 댓글 삭제를 `comment.isMine`으로 환원, `EyeOff` import 제거.
+2. 신규 파일 없음. DB/마이그레이션 변경 없음(`posts.hidden`은 기존 컬럼).
+
+**미적용(후속 후보)**: 댓글 숨김(comments.hidden), 모더레이션 감사 로그·소프트 삭제, 강제 숨김 사유 기록, 작성자 알림, 피드 카드 인라인 모더레이션.
+
+---
+
+## content-counter — 작성 폼 글자수 카운터 (2026-06-04)
+
+§6 UX. 글 작성/수정 폼에 제목·본문 **실시간 글자수 카운터** + `maxLength` 클라이언트 차단. 한도(제목 200/본문 10,000)는 기존 백엔드 `@Size`와 동일, **변경 없음**. **프론트 전용**(서버 무변경).
+
+**범위/동작**
+- `PostForm`에 상수 `TITLE_MAX=200`/`CONTENT_MAX=10000`(백엔드 `@Size`와 일치). 라벨 우측에 `n / 10,000` 표기, 90% 도달 시 `text-destructive`. `<input>`/`<textarea>`에 `maxLength`로 1차 차단(서버 `@Size`는 최종 방어선 유지).
+
+**마커 위치 (`[FEATURE:content-counter]`)**
+- 프론트: `components/PostForm.jsx`(상수 블록, 제목/본문 카운터 span 블록). `maxLength={TITLE_MAX}`/`{CONTENT_MAX}`는 입력 요소 속성으로 동반.
+
+**롤백 절차**
+1. `[FEATURE:content-counter]` 마커 블록(상수·카운터 span) 제거, 제목/본문 입력의 `maxLength` 속성 제거. 라벨 래퍼(`flex justify-between`)를 원래 단일 `<label className="block ... mb-2">`로 환원.
+2. 신규 파일 없음. 스키마/백엔드 변경 없음.
+
+**미적용(후속 후보)**: 댓글 입력 카운터, 한도 초과 시 폼 에러 메시지, 마크다운 렌더 길이 vs 원문 구분.

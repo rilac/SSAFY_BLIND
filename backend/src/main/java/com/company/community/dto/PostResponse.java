@@ -49,6 +49,11 @@ public class PostResponse {
     private boolean pinned;
     // [/FEATURE:pinned-posts]
 
+    // [FEATURE:admin-moderation] 숨김 여부 — 관리자만 숨김 글을 열람하므로(getPost), 상세 페이지의 숨김/해제 토글·상태 배지용.
+    @JsonProperty("hidden")
+    private boolean hidden;
+    // [/FEATURE:admin-moderation]
+
     // ★ 가명(닉네임·기수·지역)만 노출 — mmUserId/email 등 실제 신원은 포함하지 않는다.
     // author는 호출부에서 배치 조회한 작성자 User를 전달받는다. poll은 호출부(PostService)에서 PollService로 계산해 전달(투표 없으면 null).
     // [FEATURE:reactions] isLiked/likeCount 자리에 reactions(ReactionResponse)를 받는다. reactions는 호출부(PostService)에서 계산.
@@ -77,7 +82,8 @@ public class PostResponse {
                 isBookmarked,
                 post.getAcceptedCommentId(), // [FEATURE:qna-accept]
                 poll, // [FEATURE:poll]
-                post.isPinned() // [FEATURE:pinned-posts]
+                post.isPinned(), // [FEATURE:pinned-posts]
+                post.isHidden() // [FEATURE:admin-moderation]
         );
     }
 }

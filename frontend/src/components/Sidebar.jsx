@@ -3,6 +3,7 @@ import {
   MessageSquare,
   Briefcase,
   HelpCircle,
+  Utensils, // [FEATURE:food-board]
   Bookmark,
   User,
   ChevronRight,
@@ -21,6 +22,7 @@ const categoryItems = [
   { id: 'FREE', label: CATEGORY_LABELS.FREE, icon: MessageSquare },
   { id: 'JOB', label: CATEGORY_LABELS.JOB, icon: Briefcase },
   { id: 'QUESTION', label: CATEGORY_LABELS.QUESTION, icon: HelpCircle },
+  { id: 'FOOD', label: CATEGORY_LABELS.FOOD, icon: Utensils }, // [FEATURE:food-board]
 ];
 
 // 피드 좌측 사이드바: 헤더(홈) / 카테고리 / 스크랩·내가 쓴 글·건의함·관리자 / 유저 메뉴

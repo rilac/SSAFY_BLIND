@@ -1,6 +1,11 @@
 import { useState } from 'react';
 import { POST_CATEGORIES, CATEGORY_LABELS } from '../lib/categories';
 
+// [FEATURE:content-counter] 백엔드 @Size(PostCreateRequest/PostUpdateRequest)와 일치 — 클라이언트단 1차 차단, 서버가 최종 방어선.
+const TITLE_MAX = 200;
+const CONTENT_MAX = 10000;
+// [/FEATURE:content-counter]
+
 // 새 글 작성 / 수정 공용 폼 (카테고리 · 제목 · 내용)
 export default function PostForm({ initialValues, submitLabel, submitting, error, onSubmit, onCancel, allowPoll }) {
   const [category, setCategory] = useState(initialValues.category);
@@ -56,12 +61,24 @@ export default function PostForm({ initialValues, submitLabel, submitting, error
 
       {/* Title */}
       <div>
-        <label className="block text-sm font-mono mb-2">제목</label>
+        <div className="flex items-baseline justify-between mb-2">
+          <label className="block text-sm font-mono">제목</label>
+          {/* [FEATURE:content-counter] 제목 글자수 카운터 */}
+          <span
+            className={`text-xs font-mono ${
+              title.length >= TITLE_MAX * 0.9 ? 'text-destructive' : 'text-muted-foreground'
+            }`}
+          >
+            {title.length.toLocaleString()} / {TITLE_MAX.toLocaleString()}
+          </span>
+          {/* [/FEATURE:content-counter] */}
+        </div>
         <input
           type="text"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
           placeholder="제목을 입력하세요"
+          maxLength={TITLE_MAX}
           className="w-full h-12 px-4 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
           required
         />
@@ -70,18 +87,30 @@ export default function PostForm({ initialValues, submitLabel, submitting, error
       {/* Content */}
       <div>
         {/* [FEATURE:markdown-rendering] 마크다운 작성 힌트 */}
-        <label className="block text-sm font-mono mb-2">
-          내용
-          <span className="ml-2 text-xs text-muted-foreground">
-            마크다운 지원 · `코드` ```코드블록``` # 제목 **굵게** - 목록
+        <div className="flex items-baseline justify-between gap-2 mb-2">
+          <label className="block text-sm font-mono">
+            내용
+            <span className="ml-2 text-xs text-muted-foreground">
+              마크다운 지원 · `코드` ```코드블록``` # 제목 **굵게** - 목록
+            </span>
+          </label>
+          {/* [FEATURE:content-counter] 본문 글자수 카운터 */}
+          <span
+            className={`shrink-0 text-xs font-mono ${
+              content.length >= CONTENT_MAX * 0.9 ? 'text-destructive' : 'text-muted-foreground'
+            }`}
+          >
+            {content.length.toLocaleString()} / {CONTENT_MAX.toLocaleString()}
           </span>
-        </label>
+          {/* [/FEATURE:content-counter] */}
+        </div>
         {/* [/FEATURE:markdown-rendering] */}
         <textarea
           value={content}
           onChange={(e) => setContent(e.target.value)}
           placeholder="내용을 입력하세요"
           rows={12}
+          maxLength={CONTENT_MAX}
           className="w-full px-4 py-3 bg-input-background border border-border text-sm leading-relaxed placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors resize-none"
           required
         />
