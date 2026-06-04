@@ -49,8 +49,9 @@ function App() {
             <Route path="/admin" element={
               <PrivateRoute><AdminPage /></PrivateRoute>
             } />
-
-            <Route path="*" element={<Navigate to="/login" replace />} />
+            <Route path="*" element={
+              <PrivateRoute><Navigate to="/feed" replace /></PrivateRoute>
+            } />
           </Routes>
         </div>
       </AuthProvider>
