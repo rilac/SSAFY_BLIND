@@ -288,9 +288,16 @@ export default function PostDetailPage() {
   };
   // [/FEATURE:admin-moderation]
 
+  // 피드로 돌아가기 — 브라우저 뒤로가기처럼 직전 피드(페이지·필터 유지)로 복원.
+  // 직접 진입/새로고침(앱 내 이전 기록 없음)이면 /feed로 폴백. idx는 react-router가 history.state에 둔 항목 인덱스.
+  const handleBack = () => {
+    if (window.history.state?.idx > 0) navigate(-1);
+    else navigate('/feed');
+  };
+
   const backBtn = (
     <button
-      onClick={() => navigate('/feed')}
+      onClick={handleBack}
       className="flex items-center gap-2 text-sm font-mono text-muted-foreground hover:text-foreground transition-colors mb-4"
     >
       <ArrowLeft size={16} />
