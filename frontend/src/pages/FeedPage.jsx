@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { FileText } from 'lucide-react'; // 빈 피드 상태 글리프
 import axios from 'axios';
@@ -13,7 +13,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import AlertDialog from '../components/AlertDialog';
 import { CATEGORY_LABELS } from '../lib/categories';
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 10; // [FEATURE:feed-pagination] 카테고리별 10건/페이지
 
 function viewLabel(scope, category, user) {
   if (scope === 'bookmarked') return '스크랩';
@@ -25,6 +25,23 @@ function viewLabel(scope, category, user) {
   if (category === 'all') return '전체글';
   return CATEGORY_LABELS[category] || '전체글';
 }
+
+// [FEATURE:category-descriptions] 제목 옆 안내 문구 — 현재 뷰(카테고리/라운지/스코프)에 맞춰 한 줄.
+function viewDescription(scope, category, user) {
+  if (scope === 'bookmarked') return '스크랩한 게시물을 모아봤어요.';
+  if (scope === 'mine') return '내가 작성한 게시물이에요.';
+  if (scope === 'campus') return `${user?.campus || '우리'} 캠퍼스 사용자들의 글만 조회합니다.`;
+  if (scope === 'cohort') return `${user?.cohort || '동기'} 사용자들의 글만 조회합니다.`;
+  const byCategory = {
+    all: '싸피숲에 올라온 게시물들을 모두 확인해보세요.',
+    FREE: '자유롭게 일상과 생각을 나눠보세요.',
+    JOB: '취업 준비부터 합격 후기까지, 정보와 경험을 나눠요!',
+    QUESTION: '프로젝트·코드 관련 내용을 편하게 질문해보세요!',
+    FOOD: '나만 알고 있는 맛집을 모두와 공유해주세요!',
+  };
+  return byCategory[category] || byCategory.all;
+}
+// [/FEATURE:category-descriptions]
 
 // 빈 상태 안내 한 줄 — 현재 뷰(검색/스크랩/내 글/일반)에 맞춰 다음 행동을 제시한다.
 function emptyHint(scope, search) {
@@ -39,12 +56,12 @@ export default function FeedPage() {
   const { user, logout } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
 
-  // 목록 상태
+  // 목록 상태 — [FEATURE:feed-pagination] 페이지 단위(10건) 교체 방식(무한 append → 페이지네이션)
   const [posts, setPosts] = useState([]);
-  const [page, setPage] = useState(0);
-  const [hasNext, setHasNext] = useState(false);
+  const [page, setPage] = useState(0); // 0-based 현재 페이지
+  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
+  const mainRef = useRef(null); // 페이지 이동 시 목록 상단으로 스크롤
 
   // 필터 상태
   const [category, setCategory] = useState('all'); // 'all' | enum
@@ -82,7 +99,7 @@ export default function FeedPage() {
   useEffect(() => {
     if (!user?.id) return;
     const controller = new AbortController();
-    fetchPosts(0, true, controller.signal);
+    fetchPosts(0, controller.signal);
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id, category, scope, sort, debouncedSearch]);
@@ -103,21 +120,27 @@ export default function FeedPage() {
     return params.toString();
   };
 
-  const fetchPosts = async (pageNum, reset, signal) => {
-    reset ? setLoading(true) : setLoadingMore(true);
+  const fetchPosts = async (pageNum, signal) => {
+    setLoading(true);
     try {
       const res = await api.get(`/posts?${buildQuery(pageNum)}`, { signal });
       const data = res.data;
-      setPosts((prev) => (reset ? data.content : [...prev, ...data.content]));
+      setPosts(data.content);
       setPage(data.currentPage);
-      setHasNext(data.hasNext);
-      reset ? setLoading(false) : setLoadingMore(false);
+      setTotalPages(data.totalPages);
+      setLoading(false);
     } catch (err) {
       // 취소된 요청은 후속 요청이 상태를 처리하므로 loading 플래그를 건드리지 않는다.
       if (axios.isCancel(err)) return;
       console.error('게시글 목록 조회 실패', err);
-      reset ? setLoading(false) : setLoadingMore(false);
+      setLoading(false);
     }
+  };
+
+  // [FEATURE:feed-pagination] 1-based 페이지를 받아 0-based로 조회하고 목록 상단으로 스크롤.
+  const goToPage = (p1) => {
+    fetchPosts(p1 - 1);
+    mainRef.current?.scrollTo({ top: 0 });
   };
 
   const fetchNotifications = async () => {
@@ -144,10 +167,10 @@ export default function FeedPage() {
     }
   };
 
-  const submitReport = async (reason) => {
+  const submitReport = async (reason, detail) => {
     setReportSubmitting(true);
     try {
-      await api.post(`/posts/${reportTargetId}/report`, { reason });
+      await api.post(`/posts/${reportTargetId}/report`, { reason, detail }); // [FEATURE:report-detail]
       setReportTargetId(null);
       setNotice({ title: '신고 접수', message: '신고가 접수되었습니다.' });
     } catch {
@@ -241,14 +264,19 @@ export default function FeedPage() {
           onSortChange={setSort}
         />
 
-        <main className="flex-1 overflow-y-auto">
+        <main ref={mainRef} className="flex-1 overflow-y-auto">
           <div className="max-w-4xl mx-auto p-6">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-lg font-mono font-semibold tracking-tight">{viewLabel(scope, category, user)}</h2>
-              {debouncedSearch && (
-                <span className="text-xs font-mono text-muted-foreground">SEARCH: "{debouncedSearch}"</span>
-              )}
+            {/* [FEATURE:category-descriptions] 제목 옆 카테고리/라운지 설명 문구 */}
+            <div className="mb-4">
+              <div className="flex items-baseline gap-2 flex-wrap">
+                <h2 className="text-lg font-mono font-semibold tracking-tight">{viewLabel(scope, category, user)}</h2>
+                <span className="text-sm font-mono text-muted-foreground">— {viewDescription(scope, category, user)}</span>
+                {debouncedSearch && (
+                  <span className="ml-auto text-xs font-mono text-muted-foreground">SEARCH: "{debouncedSearch}"</span>
+                )}
+              </div>
             </div>
+            {/* [/FEATURE:category-descriptions] */}
 
             {loading ? (
               <p className="text-sm font-mono text-muted-foreground py-12 text-center">불러오는 중...</p>
@@ -274,17 +302,10 @@ export default function FeedPage() {
                   ))}
                 </div>
 
-                {hasNext && (
-                  <div className="mt-8 pt-6 border-t border-border">
-                    <button
-                      onClick={() => fetchPosts(page + 1, false)}
-                      disabled={loadingMore}
-                      className="w-full py-3 border border-border hover:border-primary text-sm font-mono transition-colors disabled:opacity-50"
-                    >
-                      {loadingMore ? '불러오는 중...' : 'LOAD_MORE_POSTS'}
-                    </button>
-                  </div>
-                )}
+                {/* [FEATURE:feed-pagination] 페이지네이션 — 10건/페이지, 이전/다음 + 현재/전체 */}
+                <div className="mt-8 pt-6 border-t border-border">
+                  <Pager page={page + 1} pageCount={totalPages} onChange={goToPage} />
+                </div>
               </>
             )}
           </div>
@@ -315,6 +336,30 @@ export default function FeedPage() {
         message={notice?.message}
         onClose={() => setNotice(null)}
       />
+    </div>
+  );
+}
+
+// [FEATURE:feed-pagination] 페이지네이션 컨트롤 — 이전/다음 + "현재 / 전체". 1페이지 이하면 미렌더.
+function Pager({ page, pageCount, onChange }) {
+  if (pageCount <= 1) return null;
+  return (
+    <div className="flex items-center justify-center gap-3 text-xs font-mono">
+      <button
+        onClick={() => onChange(page - 1)}
+        disabled={page <= 1}
+        className="px-3 py-1.5 border border-border hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        이전
+      </button>
+      <span className="text-muted-foreground">{page} / {pageCount}</span>
+      <button
+        onClick={() => onChange(page + 1)}
+        disabled={page >= pageCount}
+        className="px-3 py-1.5 border border-border hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+      >
+        다음
+      </button>
     </div>
   );
 }

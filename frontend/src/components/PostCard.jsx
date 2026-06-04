@@ -1,4 +1,4 @@
-import { Flag, Eye, ThumbsUp, MessageSquare, Bookmark, CheckCircle2, BarChart3, Pin } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3: [FEATURE:poll] · Pin: [FEATURE:pinned-posts]
+import { Flag, Eye, EyeOff, ThumbsUp, MessageSquare, Bookmark, CheckCircle2, BarChart3, Pin } from 'lucide-react'; // CheckCircle2: [FEATURE:qna-accept] · BarChart3: [FEATURE:poll] · Pin: [FEATURE:pinned-posts] · EyeOff: [FEATURE:admin-moderation] 숨김
 import { formatTimestamp, formatNumber } from '../lib/format';
 import { categoryLabel } from '../lib/categories';
 
@@ -11,6 +11,13 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
+          {/* [FEATURE:admin-moderation] 숨김 글 배지 — 관리자 목록에만 hidden=true가 내려온다(비관리자 목록엔 숨김 글 부재) */}
+          {post.hidden && (
+            <span className="flex items-center gap-1 px-1.5 py-0.5 border border-destructive text-destructive text-[10px] font-bold leading-none">
+              <EyeOff size={10} /> 숨김
+            </span>
+          )}
+          {/* [/FEATURE:admin-moderation] */}
           {/* [FEATURE:pinned-posts] 공지 고정 배지 — 가장 앞에 노출 */}
           {post.pinned && (
             <span className="flex items-center gap-1 px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold leading-none">

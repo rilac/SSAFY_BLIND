@@ -57,6 +57,11 @@ public class PostListResponse {
     private boolean pinned;
     // [/FEATURE:pinned-posts]
 
+    // [FEATURE:admin-moderation] 숨김 여부 — 관리자 피드에만 숨김 글이 포함되므로(비관리자 목록엔 부재), 카드 "숨김" 배지용. post에서 직접 읽어 호출부 무변경.
+    @JsonProperty("hidden")
+    private boolean hidden;
+    // [/FEATURE:admin-moderation]
+
     // ★ 가명(닉네임·기수·지역)만 노출. author는 호출부에서 배치 조회한 작성자 User.
     public static PostListResponse of(Post post, long commentCount, Long currentUserId,
                                       long reactionTotal, String myReaction, boolean isBookmarked, User author,
@@ -76,7 +81,8 @@ public class PostListResponse {
                 post.getAcceptedCommentId() != null, // [FEATURE:qna-accept] solved
                 hasPoll, // [FEATURE:poll]
                 isNew, isRead, // [FEATURE:unread-new]
-                post.isPinned() // [FEATURE:pinned-posts]
+                post.isPinned(), // [FEATURE:pinned-posts]
+                post.isHidden() // [FEATURE:admin-moderation]
         );
     }
 }

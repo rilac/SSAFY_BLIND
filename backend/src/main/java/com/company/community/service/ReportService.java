@@ -27,7 +27,7 @@ public class ReportService {
     private final UserRepository userRepository;
 
     @Transactional
-    public void report(Long userId, Long postId, ReportReason reason) {
+    public void report(Long userId, Long postId, ReportReason reason, String detail) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
 
@@ -36,6 +36,9 @@ public class ReportService {
             return;
         }
 
+        // [FEATURE:report-detail] 상세 사유는 trim, 공백뿐이면 null(주로 ETC에서만 채워짐).
+        String trimmedDetail = (detail != null && !detail.isBlank()) ? detail.trim() : null;
+
         User reporter = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
         try {
@@ -43,6 +46,7 @@ public class ReportService {
                     .post(post)
                     .reporter(reporter)
                     .reason(reason)
+                    .detail(trimmedDetail) // [FEATURE:report-detail]
                     .build());
         } catch (DataIntegrityViolationException e) {
             // 동시 중복 신고 — 멱등 무시

@@ -52,7 +52,7 @@ class ReportServiceTest {
         given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(false);
         given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
 
-        reportService.report(1L, 10L, ReportReason.SPAM);
+        reportService.report(1L, 10L, ReportReason.SPAM, null);
 
         verify(reportRepository).save(any(Report.class));
     }
@@ -63,7 +63,7 @@ class ReportServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(true);
 
-        reportService.report(1L, 10L, ReportReason.SPAM);
+        reportService.report(1L, 10L, ReportReason.SPAM, null);
 
         verify(reportRepository, never()).save(any());
     }
@@ -76,7 +76,7 @@ class ReportServiceTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
         given(reportRepository.countByPostId(10L)).willReturn(5L);
 
-        reportService.report(1L, 10L, ReportReason.OFF_TOPIC);
+        reportService.report(1L, 10L, ReportReason.OFF_TOPIC, null);
 
         assertThat(post.isHidden()).isTrue();
     }
@@ -89,9 +89,24 @@ class ReportServiceTest {
         given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
         given(reportRepository.countByPostId(10L)).willReturn(3L);
 
-        reportService.report(1L, 10L, ReportReason.ETC);
+        reportService.report(1L, 10L, ReportReason.ETC, null);
 
         assertThat(post.isHidden()).isFalse();
+    }
+
+    // [FEATURE:report-detail] 기타 신고의 상세 사유가 trim되어 저장된다.
+    @Test
+    @DisplayName("기타(ETC) 신고 시 상세 사유가 trim되어 저장된다")
+    void test_ETC_상세사유_저장() {
+        given(postRepository.findById(10L)).willReturn(Optional.of(post));
+        given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(false);
+        given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
+
+        reportService.report(1L, 10L, ReportReason.ETC, "  광고 도배예요  ");
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Report.class);
+        verify(reportRepository).save(captor.capture());
+        assertThat(captor.getValue().getDetail()).isEqualTo("광고 도배예요");
     }
 
     @Test
@@ -102,7 +117,7 @@ class ReportServiceTest {
         given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(false);
         given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
 
-        reportService.report(1L, 10L, ReportReason.OFF_TOPIC);
+        reportService.report(1L, 10L, ReportReason.OFF_TOPIC, null);
 
         // reviewed 글은 임계값 카운트 쿼리 자체를 건너뛰고 숨김되지 않는다
         assertThat(post.isHidden()).isFalse();

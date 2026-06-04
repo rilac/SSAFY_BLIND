@@ -46,7 +46,7 @@ class PostPinnedRepositoryTest {
         Post pinned = postRepository.save(post("공지 글", u, true));
         postRepository.save(post("일반 글 B", u, false));
 
-        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, null, pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, null, false, pageable);
 
         assertThat(page.getContent().get(0).getId()).isEqualTo(pinned.getId());
         assertThat(page.getTotalElements()).isEqualTo(3);
@@ -65,7 +65,7 @@ class PostPinnedRepositoryTest {
         postLikeRepository.save(PostLike.builder().post(popular).user(v1).build());
         postLikeRepository.save(PostLike.builder().post(popular).user(v2).build());
 
-        Page<Post> page = postRepository.findFilteredPopular(null, null, null, null, null, null, pageable);
+        Page<Post> page = postRepository.findFilteredPopular(null, null, null, null, null, null, false, pageable);
 
         assertThat(page.getContent().get(0).getId()).isEqualTo(pinned.getId());
         assertThat(page.getContent().get(1).getId()).isEqualTo(popular.getId());
@@ -78,7 +78,7 @@ class PostPinnedRepositoryTest {
         postRepository.save(post("글", u, false));
         postRepository.save(post("글", u, false));
 
-        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, null, pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, null, false, pageable);
 
         assertThat(page.getTotalElements()).isEqualTo(2);
     }

@@ -25,7 +25,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
     //  [FEATURE:cohort-campus-lounge] cohort: scope=cohort (동기) / campus: scope=campus (우리 캠퍼스)
     // 댓글수·좋아요수 등은 서비스에서 IN절 배치 조회 (N+1 방지)
     @Query(value = "SELECT p FROM Post p " +
-            "WHERE p.hidden = false AND (:category IS NULL OR p.category = :category) " +
+            "WHERE (:includeHidden = true OR p.hidden = false) AND (:category IS NULL OR p.category = :category) " +
             "AND (:keyword IS NULL OR p.title LIKE CONCAT('%', :keyword, '%') OR p.content LIKE CONCAT('%', :keyword, '%')) " +
             "AND (:authorId IS NULL OR p.author.id = :authorId) " +
             "AND (:bookmarkerId IS NULL OR EXISTS (SELECT b.id FROM Bookmark b WHERE b.post = p AND b.user.id = :bookmarkerId)) " +
@@ -36,7 +36,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             // [FEATURE:pinned-posts] 공지 고정 글을 항상 최상단(필터 결과 내). 동순위는 기존 최신순.
             "ORDER BY p.pinned DESC, p.createdAt DESC",
            countQuery = "SELECT COUNT(p) FROM Post p " +
-            "WHERE p.hidden = false AND (:category IS NULL OR p.category = :category) " +
+            "WHERE (:includeHidden = true OR p.hidden = false) AND (:category IS NULL OR p.category = :category) " +
             "AND (:keyword IS NULL OR p.title LIKE CONCAT('%', :keyword, '%') OR p.content LIKE CONCAT('%', :keyword, '%')) " +
             "AND (:authorId IS NULL OR p.author.id = :authorId) " +
             "AND (:bookmarkerId IS NULL OR EXISTS (SELECT b.id FROM Bookmark b WHERE b.post = p AND b.user.id = :bookmarkerId)) " +
@@ -50,11 +50,12 @@ public interface PostRepository extends JpaRepository<Post, Long> {
                                   @Param("bookmarkerId") Long bookmarkerId,
                                   @Param("cohort") String cohort,   // [FEATURE:cohort-campus-lounge]
                                   @Param("campus") String campus,   // [FEATURE:cohort-campus-lounge]
+                                  @Param("includeHidden") boolean includeHidden, // [FEATURE:admin-moderation] ADMIN이면 숨김 글 포함
                                   Pageable pageable);
 
     // 통합 목록 — 인기순(좋아요 수 desc, 동률 시 최신). 필터는 위와 동일.
     @Query(value = "SELECT p FROM Post p LEFT JOIN PostLike pl ON pl.post = p " +
-            "WHERE p.hidden = false AND (:category IS NULL OR p.category = :category) " +
+            "WHERE (:includeHidden = true OR p.hidden = false) AND (:category IS NULL OR p.category = :category) " +
             "AND (:keyword IS NULL OR p.title LIKE CONCAT('%', :keyword, '%') OR p.content LIKE CONCAT('%', :keyword, '%')) " +
             "AND (:authorId IS NULL OR p.author.id = :authorId) " +
             "AND (:bookmarkerId IS NULL OR EXISTS (SELECT b.id FROM Bookmark b WHERE b.post = p AND b.user.id = :bookmarkerId)) " +
@@ -65,7 +66,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             // [FEATURE:pinned-posts] 공지 고정 글을 항상 최상단(필터 결과 내). 동순위는 기존 인기순(좋아요수→최신).
             "GROUP BY p ORDER BY p.pinned DESC, COUNT(pl) DESC, p.createdAt DESC",
            countQuery = "SELECT COUNT(p) FROM Post p " +
-            "WHERE p.hidden = false AND (:category IS NULL OR p.category = :category) " +
+            "WHERE (:includeHidden = true OR p.hidden = false) AND (:category IS NULL OR p.category = :category) " +
             "AND (:keyword IS NULL OR p.title LIKE CONCAT('%', :keyword, '%') OR p.content LIKE CONCAT('%', :keyword, '%')) " +
             "AND (:authorId IS NULL OR p.author.id = :authorId) " +
             "AND (:bookmarkerId IS NULL OR EXISTS (SELECT b.id FROM Bookmark b WHERE b.post = p AND b.user.id = :bookmarkerId)) " +
@@ -79,6 +80,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
                                    @Param("bookmarkerId") Long bookmarkerId,
                                    @Param("cohort") String cohort,   // [FEATURE:cohort-campus-lounge]
                                    @Param("campus") String campus,   // [FEATURE:cohort-campus-lounge]
+                                   @Param("includeHidden") boolean includeHidden, // [FEATURE:admin-moderation] ADMIN이면 숨김 글 포함
                                    Pageable pageable);
 
     // [FEATURE:weekly-digest] 주간 다이제스트 — 최근 N일(:since 이후 작성) 인기 글 랭킹.

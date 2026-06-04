@@ -33,7 +33,9 @@ import java.util.Set;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
@@ -238,15 +240,15 @@ class PostServiceTest {
                 .status(UserStatus.ACTIVE).role(UserRole.USER).build();
         setId(author, 1L);
         given(userRepository.findById(1L)).willReturn(Optional.of(author));
-        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), any()))
+        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), anyBoolean(), any()))
                 .willReturn(org.springframework.data.domain.Page.empty());
 
-        postService.getAllPosts(0, 20, 1L, null, null, "latest", "campus");
+        postService.getAllPosts(0, 20, 1L, null, null, "latest", "campus", UserRole.USER);
 
         var cohortCap = org.mockito.ArgumentCaptor.forClass(String.class);
         var campusCap = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(postRepository).findFilteredLatest(any(), any(), any(), any(),
-                cohortCap.capture(), campusCap.capture(), any());
+                cohortCap.capture(), campusCap.capture(), anyBoolean(), any());
         assertThat(campusCap.getValue()).isEqualTo("서울");
         assertThat(cohortCap.getValue()).isNull();
     }
@@ -258,15 +260,15 @@ class PostServiceTest {
                 .status(UserStatus.ACTIVE).role(UserRole.USER).build();
         setId(author, 1L);
         given(userRepository.findById(1L)).willReturn(Optional.of(author));
-        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), any()))
+        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), anyBoolean(), any()))
                 .willReturn(org.springframework.data.domain.Page.empty());
 
-        postService.getAllPosts(0, 20, 1L, null, null, "latest", "cohort");
+        postService.getAllPosts(0, 20, 1L, null, null, "latest", "cohort", UserRole.USER);
 
         var cohortCap = org.mockito.ArgumentCaptor.forClass(String.class);
         var campusCap = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(postRepository).findFilteredLatest(any(), any(), any(), any(),
-                cohortCap.capture(), campusCap.capture(), any());
+                cohortCap.capture(), campusCap.capture(), anyBoolean(), any());
         assertThat(cohortCap.getValue()).isEqualTo("10기");
         assertThat(campusCap.getValue()).isNull();
     }
@@ -274,20 +276,34 @@ class PostServiceTest {
     @Test
     @DisplayName("scope=all은 유저를 로드하지 않고 cohort/campus 필터가 모두 null이다")
     void test_scope_all_라운지필터_없음() {
-        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), any()))
+        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), anyBoolean(), any()))
                 .willReturn(org.springframework.data.domain.Page.empty());
 
-        postService.getAllPosts(0, 20, 1L, null, null, "latest", "all");
+        postService.getAllPosts(0, 20, 1L, null, null, "latest", "all", UserRole.USER);
 
         verify(userRepository, never()).findById(anyLong());
         var cohortCap = org.mockito.ArgumentCaptor.forClass(String.class);
         var campusCap = org.mockito.ArgumentCaptor.forClass(String.class);
         verify(postRepository).findFilteredLatest(any(), any(), any(), any(),
-                cohortCap.capture(), campusCap.capture(), any());
+                cohortCap.capture(), campusCap.capture(), anyBoolean(), any());
         assertThat(cohortCap.getValue()).isNull();
         assertThat(campusCap.getValue()).isNull();
     }
     // [/FEATURE:cohort-campus-lounge]
+
+    // [FEATURE:admin-moderation] 관리자 목록은 숨김 글 포함(includeHidden=true), 일반 유저는 제외(false).
+    @Test
+    @DisplayName("getAllPosts: role=ADMIN이면 includeHidden=true, USER면 false로 repo에 넘긴다")
+    void test_관리자_숨김글_목록포함_플래그() {
+        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), anyBoolean(), any()))
+                .willReturn(org.springframework.data.domain.Page.empty());
+
+        postService.getAllPosts(0, 20, 1L, null, null, "latest", "all", UserRole.ADMIN);
+        postService.getAllPosts(0, 20, 1L, null, null, "latest", "all", UserRole.USER);
+
+        verify(postRepository).findFilteredLatest(any(), any(), any(), any(), any(), any(), eq(true), any());
+        verify(postRepository).findFilteredLatest(any(), any(), any(), any(), any(), any(), eq(false), any());
+    }
 
     // [FEATURE:unread-new] 안 읽은 새 글(NEW)/읽음 표시 계산
     @Test
@@ -299,7 +315,7 @@ class PostServiceTest {
         Post mine = postWith(13L, author, now);                      // 본인 글 → NEW 아님
         Post oldUnread = postWith(14L, otherUser, now.minusDays(10)); // 오래됨 → NEW 아님
 
-        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), any()))
+        given(postRepository.findFilteredLatest(any(), any(), any(), any(), any(), any(), anyBoolean(), any()))
                 .willReturn(new PageImpl<>(List.of(recentUnread, recentRead, mine, oldUnread)));
         given(commentRepository.countByPostIds(any())).willReturn(List.of());
         given(postLikeRepository.countByPostIds(any())).willReturn(List.of());
@@ -311,7 +327,7 @@ class PostServiceTest {
 
         // currentUserId = author(1L)
         List<PostListResponse> content = postService
-                .getAllPosts(0, 20, 1L, null, null, "latest", "all").getContent();
+                .getAllPosts(0, 20, 1L, null, null, "latest", "all", UserRole.USER).getContent();
 
         assertThat(content.get(0).isNew()).isTrue();   // recentUnread
         assertThat(content.get(0).isRead()).isFalse();

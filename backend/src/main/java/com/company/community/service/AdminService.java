@@ -44,7 +44,12 @@ public class AdminService {
             List<Report> reports = entry.getValue();
             Map<ReportReason, Long> reasonCounts = reports.stream()
                     .collect(Collectors.groupingBy(Report::getReason, Collectors.counting()));
-            result.add(AdminReportedPostResponse.of(post, reports.size(), reasonCounts));
+            // [FEATURE:report-detail] 기타(ETC) 신고의 상세 사유만 모아 관리자에게 전달(빈 값 제외).
+            List<String> etcDetails = reports.stream()
+                    .filter(r -> r.getReason() == ReportReason.ETC && r.getDetail() != null && !r.getDetail().isBlank())
+                    .map(Report::getDetail)
+                    .collect(Collectors.toList());
+            result.add(AdminReportedPostResponse.of(post, reports.size(), reasonCounts, etcDetails));
         }
         // 정렬: 신고 건수 많은 순, 동률은 최신순(작성일 내림차순)
         result.sort(Comparator.comparingLong(AdminReportedPostResponse::getReportCount).reversed()

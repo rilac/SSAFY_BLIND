@@ -2,12 +2,15 @@ import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft } from 'lucide-react';
 import api from '../api/client';
+import { useAuth } from '../context/AuthContext'; // 관리자 여부 판별
 import PostForm from '../components/PostForm';
 
 // 게시글 수정 — 기존 데이터 로드 후 PostForm prefill → PUT /posts/{id}
 export default function PostEditPage() {
   const navigate = useNavigate();
   const { id } = useParams();
+  const { user } = useAuth();
+  const isAdmin = user?.role === 'ADMIN';
 
   const [initialValues, setInitialValues] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -19,8 +22,8 @@ export default function PostEditPage() {
       try {
         const res = await api.get(`/posts/${id}`);
         const { category, title, content, isMine } = res.data;
-        // 본인 글이 아니면 수정 불가 → 상세로 리다이렉트
-        if (!isMine) {
+        // 본인 글도 관리자도 아니면 수정 불가 → 상세로 리다이렉트(관리자는 카테고리 교정 등 허용)
+        if (!isMine && !isAdmin) {
           navigate(`/posts/${id}`, { replace: true });
           return;
         }
@@ -32,7 +35,7 @@ export default function PostEditPage() {
       }
     };
     fetchPost();
-  }, [id, navigate]);
+  }, [id, navigate, isAdmin]);
 
   const handleUpdate = async (values) => {
     setError('');

@@ -7,6 +7,7 @@ import lombok.AllArgsConstructor;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 // 관리자 신고 검수 목록 항목 — 신고 수 + 사유별 집계 + 숨김 여부
@@ -30,8 +31,12 @@ public class AdminReportedPostResponse {
 
     private LocalDateTime createdAt;
 
+    // [FEATURE:report-detail] 기타(ETC) 신고의 상세 사유 목록(신고자별). 없으면 빈 리스트.
+    private List<String> etcDetails;
+
     public static AdminReportedPostResponse of(Post post, long reportCount,
-                                               Map<ReportReason, Long> reasonCounts) {
+                                               Map<ReportReason, Long> reasonCounts,
+                                               List<String> etcDetails) {
         return new AdminReportedPostResponse(
                 post.getId(),
                 post.getTitle(),
@@ -39,7 +44,8 @@ public class AdminReportedPostResponse {
                 reasonCounts,
                 post.isHidden(),
                 post.isReviewed(),
-                post.getCreatedAt()
+                post.getCreatedAt(),
+                etcDetails // [FEATURE:report-detail]
         );
     }
 }

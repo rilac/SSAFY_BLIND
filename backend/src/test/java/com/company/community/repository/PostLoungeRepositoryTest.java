@@ -55,7 +55,7 @@ class PostLoungeRepositoryTest {
     @DisplayName("campus 필터는 같은 캠퍼스 작성자의 글만 조회한다")
     void test_캠퍼스_라운지() {
         // 서울 캠퍼스 → u1의 글만(p1). u2·u3는 구미라 제외
-        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, "서울", pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, "서울", false, pageable);
         assertThat(page.getContent()).extracting(Post::getId).containsExactly(p1.getId());
     }
 
@@ -63,21 +63,21 @@ class PostLoungeRepositoryTest {
     @DisplayName("cohort 필터는 같은 기수 작성자의 글만 조회한다(캠퍼스 무관)")
     void test_기수_라운지() {
         // 10기 → u1(서울)·u3(구미)의 글(p1, p3). u2는 11기라 제외
-        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, "10기", null, pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, "10기", null, false, pageable);
         assertThat(page.getContent()).extracting(Post::getId).containsExactlyInAnyOrder(p1.getId(), p3.getId());
     }
 
     @Test
     @DisplayName("cohort/campus가 모두 null이면 전체 조회(라운지 미적용)")
     void test_필터없음_전체() {
-        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, null, pageable);
+        Page<Post> page = postRepository.findFilteredLatest(null, null, null, null, null, null, false, pageable);
         assertThat(page.getTotalElements()).isEqualTo(3);
     }
 
     @Test
     @DisplayName("인기순에도 campus 필터가 동일하게 적용된다")
     void test_인기순_캠퍼스_라운지() {
-        Page<Post> page = postRepository.findFilteredPopular(null, null, null, null, null, "구미", pageable);
+        Page<Post> page = postRepository.findFilteredPopular(null, null, null, null, null, "구미", false, pageable);
         assertThat(page.getContent()).extracting(Post::getId).containsExactlyInAnyOrder(p2.getId(), p3.getId());
     }
 

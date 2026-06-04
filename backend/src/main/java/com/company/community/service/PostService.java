@@ -154,10 +154,12 @@ public class PostService {
     @Transactional(readOnly = true)
     public PageResponse<PostListResponse> getAllPosts(int page, int size, Long currentUserId,
                                                       PostCategory category, String keyword,
-                                                      String sort, String scope) {
+                                                      String sort, String scope, UserRole role) {
         Long authorId = "mine".equals(scope) ? currentUserId : null;
         Long bookmarkerId = "bookmarked".equals(scope) ? currentUserId : null;
         String kw = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
+        // [FEATURE:admin-moderation] 관리자만 숨김 글을 목록에 포함(검수/숨김 해제 동선). 일반 유저는 기존대로 제외.
+        boolean includeHidden = role == UserRole.ADMIN;
 
         // [FEATURE:cohort-campus-lounge] 라운지 scope는 현재 유저의 기수/캠퍼스로 한정(서버가 해석 — 프론트는 값 미전달).
         // 온보딩 필수값이라 ACTIVE 유저는 항상 값 보유. 라운지 scope일 때만 유저 로드.
@@ -173,8 +175,8 @@ public class PostService {
 
         Pageable pageable = PageRequest.of(page, size);
         Page<Post> resultPage = "popular".equals(sort)
-                ? postRepository.findFilteredPopular(category, kw, authorId, bookmarkerId, cohortFilter, campusFilter, pageable)
-                : postRepository.findFilteredLatest(category, kw, authorId, bookmarkerId, cohortFilter, campusFilter, pageable);
+                ? postRepository.findFilteredPopular(category, kw, authorId, bookmarkerId, cohortFilter, campusFilter, includeHidden, pageable)
+                : postRepository.findFilteredLatest(category, kw, authorId, bookmarkerId, cohortFilter, campusFilter, includeHidden, pageable);
 
         List<Post> posts = resultPage.getContent();
         List<Long> postIds = posts.stream().map(Post::getId).collect(Collectors.toList());
@@ -257,14 +259,16 @@ public class PostService {
     }
 
     /**
-     * (#3) 게시글 수정 — 본인만 가능 (ADMIN도 타인 글 수정 불가)
+     * (#3) 게시글 수정 — 본인 또는 ADMIN(관리자는 카테고리 교정 등 관리 목적으로 타인 글도 수정 가능).
      */
     @Transactional
-    public PostResponse updatePost(Long userId, Long postId, PostUpdateRequest request) {
+    public PostResponse updatePost(Long userId, Long postId, PostUpdateRequest request, UserRole role) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
 
-        if (!post.getAuthor().getId().equals(userId)) {
+        boolean isAuthor = post.getAuthor().getId().equals(userId);
+        boolean isAdmin = (role == UserRole.ADMIN);
+        if (!isAuthor && !isAdmin) {
             throw new ForbiddenException("본인의 글만 수정할 수 있습니다.");
         }
 

@@ -2,7 +2,7 @@
 
 export const CATEGORY_LABELS = {
   FREE: '자유게시판',
-  JOB: '취업/이직',
+  JOB: '취준/취업',
   QUESTION: '질문',
   FOOD: '맛집 공유', // [FEATURE:food-board]
 };

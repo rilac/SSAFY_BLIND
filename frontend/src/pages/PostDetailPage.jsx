@@ -95,10 +95,10 @@ export default function PostDetailPage() {
     }
   };
 
-  const submitReport = async (reason) => {
+  const submitReport = async (reason, detail) => {
     setReportSubmitting(true);
     try {
-      await api.post(`/posts/${id}/report`, { reason });
+      await api.post(`/posts/${id}/report`, { reason, detail }); // [FEATURE:report-detail] 기타 상세 사유 동봉
       setReportOpen(false);
       setNotice({ title: '신고 접수', message: '신고가 접수되었습니다.' });
     } catch {
@@ -443,7 +443,8 @@ export default function PostDetailPage() {
                   </button>
                 )}
                 {/* [/FEATURE:admin-moderation] */}
-                {post.isMine && (
+                {/* 수정 — 본인 또는 관리자(카테고리 교정 등). 서버 updatePost가 ADMIN 허용 */}
+                {(post.isMine || isAdmin) && (
                   <button
                     onClick={() => navigate(`/posts/${id}/edit`)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, Trash2, RotateCcw, Shield, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Trash2, RotateCcw, Shield, CheckCircle2, XCircle } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatTimestamp } from '../lib/format';
@@ -85,6 +85,16 @@ export default function AdminPage() {
       );
     } catch {
       setNotice({ title: '복원 실패', message: '복원에 실패했습니다.' });
+    }
+  };
+
+  // 신고 검수 목록에서 바로 숨김 처리(자동 숨김 임계값 전이라도 관리자가 선제적으로)
+  const handleHide = async (id) => {
+    try {
+      await api.post(`/admin/posts/${id}/hide`);
+      setReported((prev) => prev.map((p) => (p.postId === id ? { ...p, hidden: true } : p)));
+    } catch {
+      setNotice({ title: '숨김 실패', message: '숨김 처리에 실패했습니다.' });
     }
   };
 
@@ -201,7 +211,21 @@ export default function AdminPage() {
                         <span className="opacity-50">•</span>
                         <span>{formatTimestamp(p.createdAt)}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      {/* [FEATURE:report-detail] 기타(ETC) 신고의 직접 작성 사유 — 신고자별로 한 줄씩 */}
+                      {p.etcDetails?.length > 0 && (
+                        <div className="mb-3 space-y-1">
+                          {p.etcDetails.map((d, i) => (
+                            <p
+                              key={i}
+                              className="text-xs font-mono text-muted-foreground border-l-2 border-border pl-2 break-words"
+                            >
+                              기타: {d}
+                            </p>
+                          ))}
+                        </div>
+                      )}
+                      {/* [/FEATURE:report-detail] */}
+                      <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => navigate(`/posts/${p.postId}`)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
@@ -209,13 +233,22 @@ export default function AdminPage() {
                           <Eye size={12} />
                           상세보기
                         </button>
-                        {p.hidden && (
+                        {/* 숨김 ↔ 숨김 해제 토글 — 검수 목록에서 바로 처리 */}
+                        {p.hidden ? (
                           <button
                             onClick={() => handleRestore(p.postId)}
                             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
                           >
                             <RotateCcw size={12} />
                             숨김 해제
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleHide(p.postId)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
+                          >
+                            <EyeOff size={12} />
+                            숨김
                           </button>
                         )}
                         <button

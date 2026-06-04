@@ -339,19 +339,24 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 
 ## food-board — 맛집 공유 게시판 (2026-06-04)
 
-§6. 카테고리 한 종(맛집 공유) 추가. **스키마 변경 없음**(`PostCategory`는 `@Enumerated(EnumType.STRING)`이라 enum 값만 추가하면 됨 → Flyway 불필요). 백엔드(enum) + 프론트(라벨/사이드바).
+§6. 카테고리 한 종(맛집 공유) 추가. 백엔드(enum) + 프론트(라벨/사이드바) + **Flyway V9**(ENUM 컬럼 확장).
+
+> ⚠️ **교훈**: `@Enumerated(EnumType.STRING)`이지만 이 프로젝트의 MySQL은 enum을 **네이티브 `ENUM` 컬럼**으로 저장한다(V1 베이스라인 Hibernate 생성, V8 교훈과 동일). Java enum 값만 추가하면 DB ENUM 정의에 없어 `FOOD` 글 INSERT가 `Data truncated for column 'category'` → **500**. **반드시 ENUM 확장 마이그레이션 필요**(EnumType.STRING ≠ 마이그레이션 불필요). 단, `ddl-auto=validate`는 enum 멤버 목록 차이를 막지 않아 **부팅은 통과**하고 INSERT에서만 터지므로, **실 MySQL bootRun + 실제 작성**까지 확인해야 한다(H2 테스트는 flyway OFF라 못 잡음).
 
 **범위/동작**
 - `PostCategory.FOOD("맛집 공유")` 추가. 기존 필터/정렬/검색/라운지와 직교 결합(별도 분기 없음 — `getCategory()` 비교 외 exhaustive switch 없음).
+- **Flyway V9**: `alter table posts modify column category enum ('FREE','JOB','QUESTION','FOOD')` — Java 선언 순서대로(Hibernate validate가 기대하는 DDL과 일치), nullable·default 없음 유지(V1과 동일).
 - 프론트: `categories.js`(`CATEGORY_LABELS.FOOD`·`POST_CATEGORIES`), `Sidebar` 카테고리 항목(`Utensils` 아이콘). 작성/수정 폼(`PostForm`)은 `POST_CATEGORIES`를 map하므로 자동 노출. 카드/상세 배지는 `categoryLabel()` 사용이라 자동.
 
 **마커 위치 (`[FEATURE:food-board]`)**
 - 백엔드: `domain/PostCategory.java`(`FOOD` enum 값).
+- (신규) `resources/db/migration/V9__add_food_category.sql`.
 - 프론트: `lib/categories.js`(라벨+목록), `components/Sidebar.jsx`(`Utensils` import + `categoryItems` 항목).
 
 **롤백 절차**
 1. `[FEATURE:food-board]` 마커 제거: `PostCategory.FOOD` 값, `categories.js`의 `FOOD` 라벨·`POST_CATEGORIES`의 `'FOOD'`, `Sidebar`의 `Utensils` import·`categoryItems` 항목.
-2. DB: 기존 `posts.category`에 `'FOOD'` 행이 있으면 다른 카테고리로 이전/삭제 후 enum 제거(없으면 불필요). 스키마/마이그레이션 변경 없음.
+2. 신규 파일 `V9__add_food_category.sql` 삭제.
+3. DB(V9 적용 환경): `posts.category`에 `'FOOD'` 행이 있으면 다른 카테고리로 이전/삭제 후 `alter table posts modify column category enum ('FREE','JOB','QUESTION');`로 환원.
 
 **미적용(후속 후보)**: 맛집 전용 메타(지역/별점/지도 링크), 카테고리별 공지, 카테고리 동적 관리(현재 enum 하드코딩).
 
@@ -363,23 +368,28 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 
 **범위/동작**
 - 숨김: `POST /api/admin/posts/{id}/hide`(ROLE_ADMIN) → `AdminService.hidePost` → `Post.hide()`. 응답 `{ "hidden": true }`. 신고 5건 자동 숨김(`ReportService`)과 달리 임계값 무관 즉시 숨김. 해제는 기존 `POST /api/admin/posts/{id}/restore`(`restore()` → hidden=false, reviewed=true) 재사용.
-- 숨김 글은 일반 피드 비노출(`PostRepository` `hidden=false` 필터)·상세는 ADMIN만 열람(`getPost`). 댓글 숨김은 미도입(삭제로 충분 — 사용자 결정).
-- 응답: `PostResponse.hidden` 추가(상세 토글/배지용, ADMIN만 숨김 글을 보므로 노출 안전). factory에서 `post.isHidden()` 직접 읽어 PostService 호출부 무변경(pinned 패턴과 동일).
-- UI(`PostDetailPage`): 헤더 액션에 **숨김/숨김 해제** 토글(관리자 전용, `EyeOff`) + **삭제** 버튼을 `post.isMine || isAdmin`으로 확장(수정은 작성자 전용 유지 — 서버가 비작성자 수정 거부). 숨김 상태일 때 본문 상단 "숨김 상태" 안내 배너(ADMIN만). 댓글 삭제 버튼도 `comment.isMine || isAdmin`로 확장.
+- 숨김 글은 일반 피드 비노출·상세는 ADMIN만 열람(`getPost`). 댓글 숨김은 미도입(삭제로 충분 — 사용자 결정).
+- **관리자 피드 목록에 숨김 글 포함**: `PostRepository`의 `findFilteredLatest`/`findFilteredPopular`가 `WHERE p.hidden = false` → `WHERE (:includeHidden = true OR p.hidden = false)`로, `:includeHidden` 파라미터 추가(두 쿼리 value+countQuery). `PostService.getAllPosts`가 `UserRole role`을 받아 `includeHidden = (role == ADMIN)`로 전달, `PostController`가 `user.getRole()` 전달. → 관리자만 목록에서 숨김 글을 보고, 클릭→상세(이미 ADMIN 열람 가능)→숨김 해제 동선. 일반 유저는 기존대로 제외.
+- 응답: `PostResponse.hidden`(상세 토글/배지용) + `PostListResponse.hidden`(피드 "숨김" 배지용) 추가. 둘 다 factory에서 `post.isHidden()` 직접 읽어 호출부 무변경(pinned 패턴과 동일). ADMIN 목록에만 숨김 글이 내려가므로(비관리자 목록엔 부재) 노출 안전.
+- UI(`PostDetailPage`): 헤더 액션에 **숨김/숨김 해제** 토글(관리자 전용, `EyeOff`) + **삭제**·**수정** 버튼을 `post.isMine || isAdmin`으로 확장. 숨김 상태일 때 본문 상단 "숨김 상태" 안내 배너(ADMIN만). 댓글 삭제 버튼도 `comment.isMine || isAdmin`로 확장. UI(`PostCard`): 숨김 글에 빨강 "숨김" 배지(`EyeOff`).
+- **관리자 타인 글 수정**(2026-06-04): `PostService.updatePost`에 `UserRole role` 추가 → 작성자 OR ADMIN 허용(관리자 카테고리 교정 등 관리 목적). `PostController.updatePost`가 `user.getRole()` 전달, `PostEditPage`가 `useAuth`로 `isMine || isAdmin`이면 편집 화면 진입 허용.
+- **신고 검수 목록 숨김 버튼**(2026-06-04): `AdminPage` 신고 글 카드에 **숨김** 버튼 추가(`handleHide`→`POST /admin/posts/{id}/hide`, 기존 "숨김 해제"와 토글) — 자동 숨김 임계값 전에도 선제 숨김 가능.
 
-**알려진 동작/한계**: ① 수동 숨김 글은 신고 글이 아니면 `AdminPage` 신고 목록에 안 뜸(상세에서 해제) — `AdminPage`는 신고 글만 나열. ② 댓글은 삭제만(숨김 없음). ③ 감사 로그/소프트 삭제 없음(영구 삭제 — 기존 동작). ④ 피드 카드엔 모더레이션 버튼 미노출(상세 + AdminPage로 충분).
+**알려진 동작/한계**: ① 댓글은 삭제만(숨김 없음). ② 감사 로그/소프트 삭제 없음(영구 삭제 — 기존 동작). ③ 관리자 피드엔 숨김 글이 정렬 규칙 그대로 섞여 노출(별도 필터 토글 없음, 배지로 구분). ④ 비고정 숨김 글도 일반 위치에 노출(공지처럼 상단 고정 아님). ⑤ 관리자 수정 변경은 일반 수정과 동일(수정됨 표시, 작성자 익명 유지).
 
 **마커 위치 (`[FEATURE:admin-moderation]`)**
-- 백엔드: `service/AdminService.java`(`hidePost`), `controller/AdminController.java`(`POST /posts/{id}/hide`), `dto/PostResponse.java`(`hidden` 필드 + factory `post.isHidden()` 인자). 테스트: `AdminServiceTest`(숨김 성공/없는 글 2종, 마커 블록).
-- 프론트: `pages/PostDetailPage.jsx`(`EyeOff` import, `handleToggleHide`/`hideLoading`, 숨김 토글 버튼, 삭제 버튼 `isAdmin` 확장, 숨김 상태 배너, 댓글 삭제 `isAdmin` 확장).
+- 백엔드: `service/AdminService.java`(`hidePost`), `controller/AdminController.java`(`POST /posts/{id}/hide`), `dto/PostResponse.java`·`dto/PostListResponse.java`(`hidden` 필드 + factory `post.isHidden()`), `repository/PostRepository.java`(두 쿼리 `:includeHidden` 분기 + `@Param` × 2메서드), `service/PostService.java`(`getAllPosts`에 `UserRole role`·`includeHidden` + repo 호출 인자), `controller/PostController.java`(`getAllPosts`가 `user.getRole()` 전달). 테스트: `AdminServiceTest`(숨김 2종), `PostServiceTest`(role→includeHidden 1종 + 기존 호출부 인자 갱신), `PostRepositoryTest`(includeHidden=true 1종 + 호출부 갱신), `PostPinnedRepositoryTest`·`PostLoungeRepositoryTest`(호출부 인자 갱신).
+- 프론트: `pages/PostDetailPage.jsx`(`EyeOff` import, `handleToggleHide`/`hideLoading`, 숨김 토글 버튼, 삭제 버튼 `isAdmin` 확장, 숨김 상태 배너, 댓글 삭제 `isAdmin` 확장), `components/PostCard.jsx`(`EyeOff` import + 숨김 배지).
 
 **롤백 절차**
 1. `[FEATURE:admin-moderation]` 마커 블록 제거.
-   - `AdminController` hide 엔드포인트, `AdminService.hidePost`, `PostResponse.hidden` 필드 + factory 인자 제거(`AllArgsConstructor` 인자 1개 환원). `AdminServiceTest` 숨김 블록 제거.
-   - `PostDetailPage`: `handleToggleHide`/`hideLoading`·숨김 버튼·숨김 배너 제거, 삭제 버튼을 다시 `post.isMine` 프래그먼트 안으로, 댓글 삭제를 `comment.isMine`으로 환원, `EyeOff` import 제거.
+   - `AdminController` hide 엔드포인트, `AdminService.hidePost`, `PostResponse`/`PostListResponse`의 `hidden` 필드+factory 인자 제거(`AllArgsConstructor` 인자 환원).
+   - `PostRepository`: 두 쿼리의 `(:includeHidden = true OR ...)`를 `p.hidden = false`로 환원 + `@Param("includeHidden")` 제거. `PostService.getAllPosts`의 `UserRole role`·`includeHidden`·repo 인자 환원, `PostController`의 `user.getRole()` 인자 제거.
+   - 테스트: 위 5개 테스트의 호출부 인자(`false`/`anyBoolean()`/`eq()`/`UserRole`)와 신규 테스트 2종 환원. `AdminServiceTest` 숨김 블록 제거.
+   - `PostDetailPage`: `handleToggleHide`/숨김 버튼/배너 제거, 삭제 버튼을 `post.isMine` 프래그먼트로, 댓글 삭제를 `comment.isMine`으로 환원, `EyeOff` import 제거. `PostCard` 숨김 배지·`EyeOff` import 제거.
 2. 신규 파일 없음. DB/마이그레이션 변경 없음(`posts.hidden`은 기존 컬럼).
 
-**미적용(후속 후보)**: 댓글 숨김(comments.hidden), 모더레이션 감사 로그·소프트 삭제, 강제 숨김 사유 기록, 작성자 알림, 피드 카드 인라인 모더레이션.
+**미적용(후속 후보)**: 댓글 숨김(comments.hidden), 모더레이션 감사 로그·소프트 삭제, 강제 숨김 사유 기록, 작성자 알림, 관리자 피드에서 "숨김만 보기" 필터, 피드 카드 인라인 모더레이션.
 
 ---
 
@@ -398,3 +408,60 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 2. 신규 파일 없음. 스키마/백엔드 변경 없음.
 
 **미적용(후속 후보)**: 댓글 입력 카운터, 한도 초과 시 폼 에러 메시지, 마크다운 렌더 길이 vs 원문 구분.
+
+---
+
+## report-detail — 기타 신고 상세 사유 (2026-06-04)
+
+§6-1. 신고 모달에서 "기타(ETC)" 선택 시 신고자가 사유를 직접 입력하고, 관리자 검수 화면에서 그 사유를 확인. **백엔드 + 프론트엔드**, Flyway **V10**.
+
+**범위/동작**
+- 데이터: `reports.detail varchar(200)` nullable(**Flyway V10**). varchar이라 ENUM 매핑·validate와 무관.
+- 작성: `ReportRequest.detail`(`@Size(max=200)`), `ReportService.report(userId, postId, reason, detail)`가 trim·공백이면 null로 저장. 주로 ETC에서만 채워짐(다른 사유는 프론트가 미수집).
+- 표시: `AdminReportedPostResponse.etcDetails`(`List<String>`) — `AdminService.getReportedPosts`가 그 글의 ETC 신고 중 비어있지 않은 detail만 모아 전달. 관리자 카드에 "기타: …" 한 줄씩.
+- UI: `ReportModal`이 ETC 선택 시 textarea + 글자수 카운터(`n / 200`, 90% 빨강) + `maxLength=200`. 제출 시 `onSubmit(reason, ETC면 detail)`. `FeedPage`·`PostDetailPage`의 `submitReport(reason, detail)`가 `{ reason, detail }` 전송. `AdminPage`가 `etcDetails` 렌더.
+
+**알려진 동작/한계**: ① 상세 사유는 **선택**(미입력 가능). ② ETC 외 사유는 detail 미수집. ③ 200자 상한(한눈에 검수 가능하도록).
+
+**마커 위치 (`[FEATURE:report-detail]`)**
+- 백엔드: `domain/Report.java`(`detail`), `dto/ReportRequest.java`(`detail`+`@Size`), `service/ReportService.java`(시그니처+trim+builder), `dto/AdminReportedPostResponse.java`(`etcDetails`+factory), `service/AdminService.java`(etcDetails 수집). (신규) `resources/db/migration/V10__add_report_detail.sql`. 테스트: `ReportServiceTest`(detail 저장 1종 + 기존 5개 호출 인자 갱신).
+- 프론트: `components/ReportModal.jsx`(detail state·ETC textarea·카운터·submit), `pages/FeedPage.jsx`·`pages/PostDetailPage.jsx`(`submitReport(reason, detail)`), `pages/AdminPage.jsx`(etcDetails 렌더).
+
+**롤백 절차**
+1. `[FEATURE:report-detail]` 마커 제거: `Report.detail`, `ReportRequest.detail`, `ReportService.report` 시그니처를 3-인자로 환원(builder·trim 제거), `AdminReportedPostResponse.etcDetails`+factory 인자, `AdminService`의 etcDetails 수집. `PostController.report`를 `request.getReason()`만 전달로 환원. 프론트 ReportModal textarea·submit·두 submitReport·AdminPage 렌더 제거.
+2. 신규 파일 `V10__add_report_detail.sql` 삭제. 테스트 환원.
+3. DB(V10 적용 환경): `alter table reports drop column detail;`
+
+---
+
+## feed-pagination — 피드 페이지네이션(10건/페이지) (2026-06-04)
+
+§6 UX. 기존 "LOAD_MORE"(무한 append)를 **페이지 단위(10건) 페이지네이션**으로 교체(이전/다음 + 현재/전체). **프론트 전용**(백엔드 `PageResponse`는 이미 `totalPages`/`currentPage` 제공).
+
+**범위/동작**
+- `FeedPage`: `PAGE_SIZE` 20→10. `fetchPosts(pageNum, signal)`가 결과를 **교체**(append 아님)하고 `page`/`totalPages` 세팅. `goToPage(p1)`이 1-based→0-based 조회 + `mainRef`로 목록 상단 스크롤. 하단에 `Pager`(이전/다음·`page / pageCount`, 1페이지 이하 미렌더). 필터(카테고리/검색/정렬/스코프) 변경 시 0페이지부터.
+
+**알려진 동작/한계**: ① 페이지 번호 직접 점프 없음(이전/다음만). ② 필터 변경 시 1페이지로 리셋(기존과 동일). ③ 모든 카테고리/스코프에 동일 적용.
+
+**마커 위치 (`[FEATURE:feed-pagination]`)**
+- 프론트: `pages/FeedPage.jsx`(`PAGE_SIZE`, 상태[`page`/`totalPages`/`mainRef`], `fetchPosts` 교체식+`goToPage`, 효과 호출 인자, `<main ref>`, LOAD_MORE→`<Pager>`, 파일 하단 `Pager` 컴포넌트).
+
+**롤백 절차**
+1. `[FEATURE:feed-pagination]` 마커 제거: `PAGE_SIZE` 20 복귀, `fetchPosts(pageNum, reset, signal)` append식 + `hasNext`/`loadingMore` 상태 복원, `goToPage`/`Pager`/`mainRef` 제거, LOAD_MORE 버튼 복원.
+2. 신규 파일 없음. 백엔드/스키마 무변경.
+
+---
+
+## category-descriptions — 카테고리/라운지 설명 문구 (2026-06-04)
+
+§6 UX. 피드 헤더 제목 옆에 현재 뷰 안내 문구(예: "질문 — 프로젝트·코드 관련 내용을 편하게 질문해보세요!"). **프론트 전용**.
+
+**범위/동작**
+- `FeedPage`의 `viewDescription(scope, category, user)`: 스코프(스크랩/내 글/우리 캠퍼스/동기) → 맞춤 문구(라운지는 `user.campus`/`user.cohort` 동적 삽입, 예 "서울 캠퍼스 사용자들의 글만 조회합니다.", "14기 사용자들의 글만 조회합니다."), 그 외 카테고리(all/FREE/JOB/QUESTION/FOOD) → 고정 문구. 제목 옆 muted 텍스트로 렌더(검색 중이면 SEARCH 배지는 우측).
+
+**마커 위치 (`[FEATURE:category-descriptions]`)**
+- 프론트: `pages/FeedPage.jsx`(`viewDescription` 함수 + 헤더 렌더 블록).
+
+**롤백 절차**
+1. `[FEATURE:category-descriptions]` 마커 제거: `viewDescription` 함수와 헤더의 설명 `<span>` 제거, 헤더를 기존 `flex items-center justify-between`(제목 + SEARCH 배지)로 환원.
+2. 신규 파일 없음. 백엔드/스키마 무변경.

@@ -50,7 +50,7 @@ public class PostController {
             @RequestParam(defaultValue = "all") String scope) {
 
         return ResponseEntity.ok(
-                postService.getAllPosts(page, size, user.getId(), category, keyword, sort, scope));
+                postService.getAllPosts(page, size, user.getId(), category, keyword, sort, scope, user.getRole()));
     }
 
     /**
@@ -76,7 +76,8 @@ public class PostController {
             @PathVariable Long id,
             @Valid @RequestBody PostUpdateRequest request) {
 
-        return ResponseEntity.ok(postService.updatePost(user.getId(), id, request));
+        // 본인 또는 ADMIN이면 수정 가능(예: 관리자가 카테고리 교정) — role 전달
+        return ResponseEntity.ok(postService.updatePost(user.getId(), id, request, user.getRole()));
     }
 
     /**
@@ -125,7 +126,7 @@ public class PostController {
             @PathVariable Long id,
             @Valid @RequestBody ReportRequest request) {
 
-        reportService.report(user.getId(), id, request.getReason());
+        reportService.report(user.getId(), id, request.getReason(), request.getDetail());
         return ResponseEntity.ok().build();
     }
 }

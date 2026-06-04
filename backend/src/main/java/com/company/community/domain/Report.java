@@ -31,6 +31,11 @@ public class Report {
     @Enumerated(EnumType.STRING)
     private ReportReason reason;
 
+    // [FEATURE:report-detail] 기타(ETC) 선택 시 신고자가 직접 적는 상세 사유(선택, 최대 200자). varchar라 enum 마이그레이션과 무관. Flyway V10.
+    @Column(length = 200)
+    private String detail;
+    // [/FEATURE:report-detail]
+
     @Column(nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
