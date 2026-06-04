@@ -26,15 +26,13 @@ function App() {
               <OnboardingRoute><OnboardingPage /></OnboardingRoute>
             } />
 
+            {/* 공개 읽기 — 게스트도 피드 목록/상세 열람 가능(포트폴리오 데모용) */}
+            <Route path="/feed" element={<FeedPage />} />
+            <Route path="/posts/:id" element={<PostDetailPage />} />
+
             {/* 보호된 라우트 */}
-            <Route path="/feed" element={
-              <PrivateRoute><FeedPage /></PrivateRoute>
-            } />
             <Route path="/posts/new" element={
               <PrivateRoute><PostCreatePage /></PrivateRoute>
-            } />
-            <Route path="/posts/:id" element={
-              <PrivateRoute><PostDetailPage /></PrivateRoute>
             } />
             {/* (#3) 게시글 수정 라우트 */}
             <Route path="/posts/:id/edit" element={
@@ -49,9 +47,8 @@ function App() {
             <Route path="/admin" element={
               <PrivateRoute><AdminPage /></PrivateRoute>
             } />
-            <Route path="*" element={
-              <PrivateRoute><Navigate to="/feed" replace /></PrivateRoute>
-            } />
+            {/* 알 수 없는 경로 → 공개 피드로 */}
+            <Route path="*" element={<Navigate to="/feed" replace />} />
           </Routes>
         </div>
       </AuthProvider>

@@ -439,12 +439,13 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 §6 UX. 기존 "LOAD_MORE"(무한 append)를 **페이지 단위(10건) 페이지네이션**으로 교체(이전/다음 + 현재/전체). **프론트 전용**(백엔드 `PageResponse`는 이미 `totalPages`/`currentPage` 제공).
 
 **범위/동작**
-- `FeedPage`: `PAGE_SIZE` 20→10. `fetchPosts(pageNum, signal)`가 결과를 **교체**(append 아님)하고 `page`/`totalPages` 세팅. `goToPage(p1)`이 1-based→0-based 조회 + `mainRef`로 목록 상단 스크롤. 하단에 `Pager`(이전/다음·`page / pageCount`, 1페이지 이하 미렌더). 필터(카테고리/검색/정렬/스코프) 변경 시 0페이지부터.
+- `FeedPage`: `PAGE_SIZE` 20→10, 결과 **교체**(append 아님), 하단 `Pager`(이전/다음·`page / pageCount`, 1페이지 이하 미렌더).
+- **(2026-06-04 갱신) URL 쿼리 기반으로 전환** — `useSearchParams`로 `page`(1-based)·`category`·`scope`·`sort`·`q`를 URL에서 파생(`updateParams` 헬퍼; 필터/검색은 page=1 리셋, 검색은 replace). `fetchPosts(signal)`가 URL 파생값으로 조회, `goToPage`는 `?page` 갱신. **이유**: `/feed`↔`/posts/:id`가 별도 라우트라 상세 진입 시 FeedPage 언마운트 → 로컬 state 페이지네이션은 뒤로가기 시 1페이지로 초기화됐다(사용자 피드백). URL이 출처면 뒤로가기/공유/새로고침에 뷰가 복원된다. 게스트도 동일하게 페이지네이션 적용(유저 무관).
 
-**알려진 동작/한계**: ① 페이지 번호 직접 점프 없음(이전/다음만). ② 필터 변경 시 1페이지로 리셋(기존과 동일). ③ 모든 카테고리/스코프에 동일 적용.
+**알려진 동작/한계**: ① 페이지 번호 직접 점프 없음(이전/다음만). ② 필터 변경 시 1페이지로 리셋. ③ 검색 입력은 로컬 state(타이핑)→디바운스로 URL q 반영(remount 시 URL q로 복원).
 
 **마커 위치 (`[FEATURE:feed-pagination]`)**
-- 프론트: `pages/FeedPage.jsx`(`PAGE_SIZE`, 상태[`page`/`totalPages`/`mainRef`], `fetchPosts` 교체식+`goToPage`, 효과 호출 인자, `<main ref>`, LOAD_MORE→`<Pager>`, 파일 하단 `Pager` 컴포넌트).
+- 프론트: `pages/FeedPage.jsx`(`PAGE_SIZE`, `useSearchParams`로 page/필터 파생 + `updateParams`, `fetchPosts`/`goToPage`, `totalPages`/`mainRef` state, `<main ref>`, LOAD_MORE→`<Pager>`, 파일 하단 `Pager` 컴포넌트).
 
 **롤백 절차**
 1. `[FEATURE:feed-pagination]` 마커 제거: `PAGE_SIZE` 20 복귀, `fetchPosts(pageNum, reset, signal)` append식 + `hasNext`/`loadingMore` 상태 복원, `goToPage`/`Pager`/`mainRef` 제거, LOAD_MORE 버튼 복원.
@@ -494,3 +495,26 @@ Phase E부터의 **기능 확장**은 추후 롤백이 쉽도록 코드 블록�
 2. 신규 파일 4종 삭제. DB(V11 적용): `drop table comment_likes;`
 
 **미적용(후속 후보)**: 댓글 좋아요 알림(작성자에게), 좋아요한 사람 수만 표시→목록(익명 유지), 답글 좋아요 별도 정책.
+
+---
+
+## guest-read — 비로그인 공개 읽기(포트폴리오 데모) (2026-06-04)
+
+§6. 로그인 없이도 **전체글 목록·상세·댓글 조회**가 가능하게 — 포트폴리오 방문자가 앱이 살아있음을 보게 하기 위함. 게스트는 **읽기 전용**, 모든 쓰기/참여는 로그인 유도. **백엔드(공개 GET + 익명 통과) + 프론트(게스트 모드 + 로그인 모달)**, 스키마 변경 없음. (변경이 여러 파일의 기존 로직에 얽혀 있어 줄단위 마커 대신 본 문서로 인덱싱)
+
+**범위/동작**
+- 백엔드 공개 GET: `SecurityConfig`가 `GET /api/posts`·`/api/posts/*`·`/api/posts/*/comments` permitAll(쓰기/참여는 POST라 보호 유지) + 미인증 보호접근 시 **401 JSON 엔트리포인트**(프론트 인터셉터 호환). `JwtAuthFilter`는 **토큰 없으면 401 대신 익명 통과**(보호 차단은 SecurityConfig가 담당; 토큰 있을 때 PENDING/ACTIVE 분기는 유지).
+- 컨트롤러 null-safe: `PostController.getAllPosts`/`getPost`·`CommentController.getComments`가 `@AuthenticationPrincipal User`가 null(게스트)이면 `userId`/`role`을 null로 전달.
+- 서비스 게스트 가드(`currentUserId == null`): `PostService.getAllPosts`(라운지 유저로드·내반응/스크랩/열람 배치 skip, `isNew=false`), `getPost`(**조회수 미집계** — PostView.user_id NOT NULL; 숨김글은 role≠ADMIN→404), `CommentService.getComments`(likedSet skip). isMine/isLiked는 `Long.equals(null)`로 자연히 false.
+- 프론트 라우팅: `/feed`·`/posts/:id` 공개(PrivateRoute 제거), 캐치올 `*`→`/feed`. 나머지(`/posts/new`·`edit`·`/settings`·`/feedback`·`/admin`)는 PrivateRoute, `/onboarding`은 OnboardingRoute.
+- 프론트 게스트 UX: `FeedPage`가 `authLoading` 끝나면 게스트도 fetch(기존 `user?.id` 가드 대체), 알림은 user 있을 때만. Sidebar는 게스트면 LOUNGE·QUICK_ACCESS 숨김+하단 "로그인" 버튼. TopBar는 게스트면 "새 글 작성"→"로그인" 버튼·알림벨 숨김. PostDetailPage는 열람 가능하되 반응·스크랩·신고·댓글작성·댓글좋아요·답글 클릭 시 **로그인 유도 모달**(ConfirmDialog 재사용, "로그인하기"→`/login`). LoginPage에 "로그인 없이 둘러보기→/feed".
+
+**알려진 동작/한계**: ① 게스트 조회는 **조회수 미집계**(익명 PostView 불가). ② 게스트 피드엔 NEW 배지·내 반응/스크랩 상태 없음. ③ 라운지/스크랩/내 글/건의함/관리자/알림은 게스트에게 숨김(서버도 라운지 scope는 게스트면 전체글로 처리). ④ PENDING(온보딩 미완료) 유저가 토큰 들고 공개 피드 접근 시 필터가 403(온보딩 유도) — 게스트(무토큰)와 다른 경로, 정상.
+
+**touch points (마커 없이 prose 인덱싱)**
+- 백엔드: `global/config/SecurityConfig`(permitAll GET + entryPoint), `global/security/JwtAuthFilter`(무토큰 익명 통과), `post/controller/PostController`·`comment/controller/CommentController`(null principal), `post/service/PostService`·`comment/service/CommentService`(null 가드). 테스트: `ApplicationSmokeTest`(보호=`/api/notifications` 401 + 공개 `/api/posts` 200).
+- 프론트: `App.jsx`(라우팅), `pages/FeedPage`·`pages/PostDetailPage`(로그인 모달·핸들러 가드), `components/Sidebar`·`components/TopBar`(게스트 분기), `pages/LoginPage`(둘러보기 링크).
+
+**롤백 절차**: SecurityConfig permitAll GET·entryPoint 제거 → `anyRequest().authenticated()`만. JwtAuthFilter 무토큰 시 401 복원. 컨트롤러 `user.getId()`/`getRole()` 직접 호출 복원. 서비스 null 가드 제거. App.jsx의 `/feed`·`/posts/:id`를 PrivateRoute로, 캐치올도 PrivateRoute로 환원. FeedPage/Sidebar/TopBar/PostDetailPage/LoginPage의 게스트 분기·로그인 모달 제거. ApplicationSmokeTest 원복. DB/마이그레이션 변경 없음.
+
+**미적용(후속 후보)**: 게스트 조회수 집계(익명 카운터), 공개 OG 메타/SEO, 게스트에게 반응/스크랩 미리보기만 노출, 로그인 모달에 회원가입 안내.

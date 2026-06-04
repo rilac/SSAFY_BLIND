@@ -11,6 +11,7 @@ import {
   LogOut,
   Inbox,
   Shield,
+  LogIn, // 게스트 로그인 버튼
   MapPin, // [FEATURE:cohort-campus-lounge]
   Users, // [FEATURE:cohort-campus-lounge]
 } from 'lucide-react';
@@ -40,8 +41,10 @@ export default function Sidebar({
   onHome,
   onFeedback,
   onAdmin,
+  onLogin,
 }) {
   const isAdmin = user?.role === 'ADMIN';
+  const isGuest = !user; // 미로그인 게스트 — 라운지/퀵액세스/유저메뉴 대신 로그인만
 
   return (
     <aside
@@ -58,7 +61,7 @@ export default function Sidebar({
           <Logo size={20} className="text-primary" />
           <h1 className="text-xl font-mono tracking-tight">SSAFY_SOOP</h1>
         </div>
-        <p className="text-xs font-mono text-muted-foreground mt-1">싸피인들을_위한_대나무숲v1.3</p>
+        <p className="text-xs font-mono text-muted-foreground mt-1">싸피인들을_위한_대나무숲v1.4</p>
       </button>
 
       <nav className="flex-1 overflow-y-auto p-4">
@@ -83,6 +86,9 @@ export default function Sidebar({
           })}
         </div>
 
+        {/* 라운지·퀵액세스(스크랩·내 글·건의함·관리자)는 로그인 유저만 — 게스트 숨김 */}
+        {!isGuest && (
+        <>
         {/* [FEATURE:cohort-campus-lounge] 기수/캠퍼스 라운지 — 같은 캠퍼스·동기(기수) 글만 보기. 익명 유지·범위만 한정. */}
         <div className="mt-8 pt-6 border-t border-border">
           <h3 className="text-xs font-mono text-muted-foreground mb-3 px-3">LOUNGE</h3>
@@ -158,9 +164,20 @@ export default function Sidebar({
             )}
           </div>
         </div>
+        </>
+        )}
       </nav>
 
       <div className="p-4 border-t border-border">
+        {isGuest ? (
+          <button
+            onClick={onLogin}
+            className="w-full flex items-center justify-center gap-2 px-3 py-2.5 text-sm font-mono border border-primary text-primary hover:bg-primary hover:text-primary-foreground transition-colors"
+          >
+            <LogIn size={16} />
+            <span>로그인</span>
+          </button>
+        ) : (
         <div className="relative">
           <button
             onClick={onToggleUserMenu}
@@ -198,6 +215,7 @@ export default function Sidebar({
             </div>
           )}
         </div>
+        )}
       </div>
     </aside>
   );

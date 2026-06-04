@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { FileText } from 'lucide-react'; // 빈 피드 상태 글리프
 import axios from 'axios';
 import api from '../api/client';
@@ -53,22 +53,43 @@ function emptyHint(scope, search) {
 
 export default function FeedPage() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { user, loading: authLoading, logout } = useAuth();
   const { darkMode, toggleDarkMode } = useTheme();
 
-  // 목록 상태 — [FEATURE:feed-pagination] 페이지 단위(10건) 교체 방식(무한 append → 페이지네이션)
+  // ★ 뷰 상태(페이지·필터·정렬·검색)는 URL 쿼리에서 파생한다.
+  //   글 상세로 이동(라우트 변경 → FeedPage 언마운트) 후 뒤로가기로 돌아와도 URL에서 그대로 복원된다.
+  const category = searchParams.get('category') || 'all';
+  const scope = searchParams.get('scope') || 'all';
+  const sort = searchParams.get('sort') || 'latest';
+  const keyword = searchParams.get('q') || '';
+  const pageParam = parseInt(searchParams.get('page') || '1', 10);
+  const page = !Number.isFinite(pageParam) || pageParam < 1 ? 1 : pageParam; // 1-based
+
+  // URL 쿼리 갱신 — 필터/검색은 page=1로 리셋(resetPage), 페이지 이동만 resetPage=false.
+  const updateParams = (updates, { resetPage = true, replace = false } = {}) => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        Object.entries(updates).forEach(([k, v]) => {
+          if (v == null || v === '') next.delete(k);
+          else next.set(k, v);
+        });
+        if (resetPage) next.delete('page');
+        return next;
+      },
+      { replace }
+    );
+  };
+
+  // 목록 상태
   const [posts, setPosts] = useState([]);
-  const [page, setPage] = useState(0); // 0-based 현재 페이지
   const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
   const mainRef = useRef(null); // 페이지 이동 시 목록 상단으로 스크롤
 
-  // 필터 상태
-  const [category, setCategory] = useState('all'); // 'all' | enum
-  const [scope, setScope] = useState('all'); // all | mine | bookmarked | campus | cohort([FEATURE:cohort-campus-lounge])
-  const [sort, setSort] = useState('latest'); // latest | popular
-  const [searchInput, setSearchInput] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
+  // 검색 입력(타이핑용) — URL q에서 초기화, 디바운스로 URL에 반영
+  const [searchInput, setSearchInput] = useState(keyword);
 
   // UI 상태
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -86,10 +107,18 @@ export default function FeedPage() {
   // 알림 모달(M-NEW-4) — 네이티브 alert 대체
   const [notice, setNotice] = useState(null); // { title?, message }
 
-  // 검색 디바운스
+  // 게스트 로그인 유도 모달 — 미로그인 상태에서 쓰기/참여 시도 시 노출
+  const [loginPromptOpen, setLoginPromptOpen] = useState(false);
+  const requireLogin = () => setLoginPromptOpen(true);
+
+  // 검색 디바운스 — 입력을 URL q로 반영(검색은 히스토리 폭주 방지로 replace).
   useEffect(() => {
-    const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 300);
+    const t = setTimeout(() => {
+      const trimmed = searchInput.trim();
+      if (trimmed !== keyword) updateParams({ q: trimmed || null }, { replace: true });
+    }, 300);
     return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchInput]);
 
   // 필터 변경 시 첫 페이지부터 재조회.
@@ -97,37 +126,31 @@ export default function FeedPage() {
   // - AbortController + cleanup → StrictMode 이중 effect/언마운트 시 첫 요청을 취소,
   //   최종 1회만 상태를 반영해 "로그인 직후 피드 미로딩"을 방지한다.
   useEffect(() => {
-    if (!user?.id) return;
+    if (authLoading) return; // 인증 확인이 끝나면 게스트/회원 모두 조회(게스트도 공개 피드 열람)
     const controller = new AbortController();
-    fetchPosts(0, controller.signal);
+    fetchPosts(controller.signal);
     return () => controller.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, category, scope, sort, debouncedSearch]);
+  }, [authLoading, category, scope, sort, keyword, page]);
 
-  // 알림 최초 로드
+  // 알림 최초 로드 — 로그인 유저만(게스트가 /notifications 호출 시 401→로그인 리다이렉트되므로 호출 안 함)
   useEffect(() => {
-    fetchNotifications();
-  }, []);
+    if (user) fetchNotifications();
+  }, [user]);
 
-  const buildQuery = (pageNum) => {
-    const params = new URLSearchParams();
-    params.set('page', pageNum);
-    params.set('size', PAGE_SIZE);
-    params.set('sort', sort);
-    params.set('scope', scope);
-    if (category !== 'all') params.set('category', category);
-    if (debouncedSearch) params.set('keyword', debouncedSearch);
-    return params.toString();
-  };
-
-  const fetchPosts = async (pageNum, signal) => {
+  const fetchPosts = async (signal) => {
     setLoading(true);
     try {
-      const res = await api.get(`/posts?${buildQuery(pageNum)}`, { signal });
-      const data = res.data;
-      setPosts(data.content);
-      setPage(data.currentPage);
-      setTotalPages(data.totalPages);
+      const params = new URLSearchParams();
+      params.set('page', page - 1); // URL은 1-based, API는 0-based
+      params.set('size', PAGE_SIZE);
+      params.set('sort', sort);
+      params.set('scope', scope);
+      if (category !== 'all') params.set('category', category);
+      if (keyword) params.set('keyword', keyword);
+      const res = await api.get(`/posts?${params.toString()}`, { signal });
+      setPosts(res.data.content);
+      setTotalPages(res.data.totalPages);
       setLoading(false);
     } catch (err) {
       // 취소된 요청은 후속 요청이 상태를 처리하므로 loading 플래그를 건드리지 않는다.
@@ -137,9 +160,9 @@ export default function FeedPage() {
     }
   };
 
-  // [FEATURE:feed-pagination] 1-based 페이지를 받아 0-based로 조회하고 목록 상단으로 스크롤.
+  // [FEATURE:feed-pagination] 페이지 이동 — URL ?page 갱신(히스토리에 남겨 뒤로가기로 복원) + 목록 상단 스크롤.
   const goToPage = (p1) => {
-    fetchPosts(p1 - 1);
+    updateParams({ page: p1 <= 1 ? null : String(p1) }, { resetPage: false });
     mainRef.current?.scrollTo({ top: 0 });
   };
 
@@ -153,6 +176,7 @@ export default function FeedPage() {
   };
 
   const handleToggleBookmark = async (id) => {
+    if (!user) return requireLogin(); // 게스트는 로그인 유도
     try {
       const res = await api.post(`/posts/${id}/bookmark`);
       const { bookmarked } = res.data;
@@ -181,8 +205,7 @@ export default function FeedPage() {
   };
 
   const handleSelectCategory = (c) => {
-    setScope('all');
-    setCategory(c);
+    updateParams({ scope: null, category: c === 'all' ? null : c });
   };
 
   // (버그픽스) 스코프(라운지·내 글·스크랩) 선택 시 카테고리를 all로 리셋한다.
@@ -190,8 +213,7 @@ export default function FeedPage() {
   // 직전 카테고리가 라운지(동기/우리 캠퍼스)에 그대로 필터로 남아 "특정 카테고리 글만 보이거나 빈 화면"이 됐다.
   // 스코프는 '모든 카테고리'를 보는 독립 뷰이므로 선택 시 category=all로 통일한다.
   const handleSelectScope = (s) => {
-    setCategory('all');
-    setScope(s);
+    updateParams({ category: null, scope: s === 'all' ? null : s });
   };
 
   // 사이드바 로그아웃 클릭 → 즉시 로그아웃하지 않고 확인 모달을 연다(사용자 메뉴는 닫음).
@@ -244,6 +266,7 @@ export default function FeedPage() {
         onHome={() => navigate('/feed')}
         onFeedback={() => navigate('/feedback')}
         onAdmin={() => navigate('/admin')}
+        onLogin={() => navigate('/login')}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -257,11 +280,12 @@ export default function FeedPage() {
           onToggleSidebar={() => setSidebarOpen((o) => !o)}
           onSearchChange={setSearchInput}
           onToggleDarkMode={toggleDarkMode}
-          onNewPost={() => navigate('/posts/new')}
+          user={user}
+          onNewPost={() => (user ? navigate('/posts/new') : navigate('/login'))}
           onToggleNotifications={() => setNotificationsOpen((o) => !o)}
           onNotificationClick={handleNotificationClick}
           onMarkAllRead={handleMarkAllRead}
-          onSortChange={setSort}
+          onSortChange={(s) => updateParams({ sort: s === 'latest' ? null : s })}
         />
 
         <main ref={mainRef} className="flex-1 overflow-y-auto">
@@ -271,8 +295,8 @@ export default function FeedPage() {
               <div className="flex items-baseline gap-2 flex-wrap">
                 <h2 className="text-lg font-mono font-semibold tracking-tight">{viewLabel(scope, category, user)}</h2>
                 <span className="text-sm font-mono text-muted-foreground">— {viewDescription(scope, category, user)}</span>
-                {debouncedSearch && (
-                  <span className="ml-auto text-xs font-mono text-muted-foreground">SEARCH: "{debouncedSearch}"</span>
+                {keyword && (
+                  <span className="ml-auto text-xs font-mono text-muted-foreground">SEARCH: "{keyword}"</span>
                 )}
               </div>
             </div>
@@ -285,7 +309,7 @@ export default function FeedPage() {
                 <FileText size={32} className="mx-auto mb-3 text-muted-foreground opacity-50" />
                 <p className="text-sm font-mono text-muted-foreground">표시할 게시글이 없습니다</p>
                 <p className="text-xs font-mono text-muted-foreground opacity-70 mt-1.5">
-                  {emptyHint(scope, debouncedSearch)}
+                  {emptyHint(scope, keyword)}
                 </p>
               </div>
             ) : (
@@ -297,14 +321,14 @@ export default function FeedPage() {
                       post={post}
                       onOpen={(id) => navigate(`/posts/${id}`)}
                       onToggleBookmark={handleToggleBookmark}
-                      onReport={setReportTargetId}
+                      onReport={(pid) => (user ? setReportTargetId(pid) : requireLogin())}
                     />
                   ))}
                 </div>
 
                 {/* [FEATURE:feed-pagination] 페이지네이션 — 10건/페이지, 이전/다음 + 현재/전체 */}
                 <div className="mt-8 pt-6 border-t border-border">
-                  <Pager page={page + 1} pageCount={totalPages} onChange={goToPage} />
+                  <Pager page={page} pageCount={totalPages} onChange={goToPage} />
                 </div>
               </>
             )}
@@ -328,6 +352,17 @@ export default function FeedPage() {
         danger
         onConfirm={handleLogout}
         onClose={() => setLogoutConfirmOpen(false)}
+      />
+
+      {/* 게스트 로그인 유도 */}
+      <ConfirmDialog
+        open={loginPromptOpen}
+        title="로그인이 필요합니다"
+        message="로그인하고 더 많은 기능을 이용해보세요."
+        confirmLabel="로그인하기"
+        cancelLabel="닫기"
+        onConfirm={() => navigate('/login')}
+        onClose={() => setLoginPromptOpen(false)}
       />
 
       <AlertDialog

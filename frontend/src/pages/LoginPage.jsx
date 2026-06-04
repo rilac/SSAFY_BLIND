@@ -39,7 +39,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-mono tracking-tight mb-2">SSAFY_SOOP</h1>
-          <p className="text-sm font-mono text-muted-foreground">싸피인들을_위한_대나무숲v1.3</p>
+          <p className="text-sm font-mono text-muted-foreground">싸피인들을_위한_대나무숲v1.4</p>
         </div>
 
         <form onSubmit={handleLogin} className="border border-border bg-card p-8">
@@ -83,6 +83,14 @@ export default function LoginPage() {
             Mattermost 계정으로 인증됩니다
           </p>
         </form>
+
+        {/* 게스트: 로그인 없이 피드 둘러보기 */}
+        <button
+          onClick={() => navigate('/feed')}
+          className="w-full mt-4 h-11 text-sm font-mono text-muted-foreground border border-border hover:border-primary hover:text-foreground transition-colors"
+        >
+          로그인 없이 둘러보기 →
+        </button>
       </div>
 
       <AlertDialog

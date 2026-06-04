@@ -102,7 +102,8 @@ public class PostService {
         }
 
         // 카운트 대상이면 조회 이력을 기록/갱신하고 벌크 UPDATE로 원자적 증가(race condition 방지)
-        boolean counted = registerViewIfCountable(post, currentUserId);
+        // 게스트(currentUserId == null)는 조회수 미집계 — PostView.user_id가 NOT NULL이라 익명 이력 저장 불가.
+        boolean counted = currentUserId != null && registerViewIfCountable(post, currentUserId);
         if (counted) {
             postRepository.incrementViewCount(postId);
         }
@@ -176,7 +177,8 @@ public class PostService {
         // 온보딩 필수값이라 ACTIVE 유저는 항상 값 보유. 라운지 scope일 때만 유저 로드.
         String cohortFilter = null;
         String campusFilter = null;
-        if ("cohort".equals(scope) || "campus".equals(scope)) {
+        // 게스트(currentUserId == null)는 라운지 사용 불가 → 필터 미적용(전체글로 처리). 프론트도 라운지 미노출.
+        if (("cohort".equals(scope) || "campus".equals(scope)) && currentUserId != null) {
             User me = userRepository.findById(currentUserId)
                     .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
             cohortFilter = "cohort".equals(scope) ? me.getCohort() : null;
@@ -206,12 +208,15 @@ public class PostService {
             // [FEATURE:reactions] 총 반응 수(타입 무관) + 내가 누른 반응 종류 배치
             postLikeRepository.countByPostIds(postIds)
                     .forEach(row -> reactionTotalMap.put((Long) row[0], (Long) row[1]));
-            postLikeRepository.findUserReactions(postIds, currentUserId)
-                    .forEach(row -> myReactionMap.put((Long) row[0], ((ReactionType) row[1]).name()));
             // [/FEATURE:reactions]
-            bookmarkedSet.addAll(bookmarkRepository.findBookmarkedPostIds(postIds, currentUserId));
             pollPostIds.addAll(pollService.hasPollPostIds(postIds)); // [FEATURE:poll]
-            viewedPostIds.addAll(postViewRepository.findViewedPostIds(postIds, currentUserId)); // [FEATURE:unread-new]
+            // 유저별(내 반응/스크랩/열람)은 로그인 유저만 — 게스트(null)는 빈 값으로 둔다.
+            if (currentUserId != null) {
+                postLikeRepository.findUserReactions(postIds, currentUserId)
+                        .forEach(row -> myReactionMap.put((Long) row[0], ((ReactionType) row[1]).name()));
+                bookmarkedSet.addAll(bookmarkRepository.findBookmarkedPostIds(postIds, currentUserId));
+                viewedPostIds.addAll(postViewRepository.findViewedPostIds(postIds, currentUserId)); // [FEATURE:unread-new]
+            }
 
             List<Long> authorIds = posts.stream()
                     .map(p -> p.getAuthor().getId())
@@ -231,7 +236,9 @@ public class PostService {
                     User author = authorMap.get(post.getAuthor().getId());
                     // [FEATURE:unread-new] 작성자 본인 글 제외 · 미열람 + 최근이면 NEW · 연 적 있으면 읽음(isRead).
                     boolean viewed = viewedPostIds.contains(pid);
-                    boolean isNew = !post.getAuthor().getId().equals(currentUserId)
+                    // 게스트(currentUserId == null)는 NEW 개념 없음.
+                    boolean isNew = currentUserId != null
+                            && !post.getAuthor().getId().equals(currentUserId)
                             && !viewed && post.getCreatedAt().isAfter(newCutoff);
                     return PostListResponse.of(post, commentCount, currentUserId, reactionTotal, myReaction, isBookmarked,
                             author, pollPostIds.contains(pid), isNew, viewed); // [FEATURE:reactions]·[FEATURE:poll]·[FEATURE:unread-new]

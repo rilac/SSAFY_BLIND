@@ -1,8 +1,9 @@
-import { Menu, X, Search, Bell, Plus, Moon, Sun } from 'lucide-react';
+import { Menu, X, Search, Bell, Plus, Moon, Sun, LogIn } from 'lucide-react';
 import NotificationPanel from './NotificationPanel';
 
 // 상단 바: 사이드바 토글 / 검색 / 다크모드 / 새 글 / 알림
 export default function TopBar({
+  user,
   sidebarOpen,
   searchValue,
   darkMode,
@@ -77,33 +78,46 @@ export default function TopBar({
           {darkMode ? <Sun size={20} /> : <Moon size={20} />}
         </button>
 
+        {/* 로그인=새 글 작성 / 게스트=로그인 버튼 */}
         <button
           onClick={onNewPost}
           className="px-4 h-10 bg-primary text-primary-foreground font-mono text-sm flex items-center gap-2 hover:opacity-90 transition-opacity"
         >
-          <Plus size={16} />
-          새 글 작성
+          {user ? (
+            <>
+              <Plus size={16} />
+              새 글 작성
+            </>
+          ) : (
+            <>
+              <LogIn size={16} />
+              로그인
+            </>
+          )}
         </button>
 
-        <div className="relative">
-          <button
-            onClick={onToggleNotifications}
-            className="relative p-2 hover:bg-muted transition-colors border border-transparent hover:border-border"
-          >
-            <Bell size={20} />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
-            )}
-          </button>
+        {/* 알림은 로그인 유저만 */}
+        {user && (
+          <div className="relative">
+            <button
+              onClick={onToggleNotifications}
+              className="relative p-2 hover:bg-muted transition-colors border border-transparent hover:border-border"
+            >
+              <Bell size={20} />
+              {unreadCount > 0 && (
+                <span className="absolute top-1 right-1 w-2 h-2 bg-destructive rounded-full" />
+              )}
+            </button>
 
-          {notificationsOpen && (
-            <NotificationPanel
-              notifications={notifications}
-              onItemClick={onNotificationClick}
-              onMarkAllRead={onMarkAllRead}
-            />
-          )}
-        </div>
+            {notificationsOpen && (
+              <NotificationPanel
+                notifications={notifications}
+                onItemClick={onNotificationClick}
+                onMarkAllRead={onMarkAllRead}
+              />
+            )}
+          </div>
+        )}
       </div>
     </header>
   );

@@ -45,7 +45,8 @@ public class CommentController {
             @AuthenticationPrincipal User user,
             @PathVariable Long postId) {
 
-        return ResponseEntity.ok(commentService.getComments(postId, user.getId()));
+        // 게스트(user == null)도 댓글 조회 가능 — userId null 전달
+        return ResponseEntity.ok(commentService.getComments(postId, user != null ? user.getId() : null));
     }
 
     /**

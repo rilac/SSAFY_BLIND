@@ -26,6 +26,9 @@ export default function PostDetailPage() {
   const { id } = useParams();
   const { user } = useAuth(); // [FEATURE:pinned-posts]
   const isAdmin = user?.role === 'ADMIN'; // [FEATURE:pinned-posts]
+  // 게스트(미로그인) — 참여(반응·스크랩·신고·댓글) 시 로그인 유도
+  const [loginPromptOpen, setLoginPromptOpen] = useState(false);
+  const requireLogin = () => setLoginPromptOpen(true);
 
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
@@ -70,6 +73,7 @@ export default function PostDetailPage() {
 
   // [FEATURE:reactions] 반응 토글 — 같은 종류 재클릭=취소, 다른 종류=변경. 서버가 집계 반환.
   const handleReact = async (type) => {
+    if (!user) return requireLogin();
     if (reactLoading) return;
     setReactLoading(true);
     try {
@@ -83,6 +87,7 @@ export default function PostDetailPage() {
   };
 
   const handleBookmark = async () => {
+    if (!user) return requireLogin();
     if (bookmarkLoading) return;
     setBookmarkLoading(true);
     try {
@@ -136,6 +141,7 @@ export default function PostDetailPage() {
 
   const handleCommentSubmit = async (e) => {
     e.preventDefault();
+    if (!user) return requireLogin();
     const trimmed = commentInput.trim();
     if (!trimmed) return;
     setCommentLoading(true);
@@ -194,6 +200,7 @@ export default function PostDetailPage() {
   const [replyInput, setReplyInput] = useState('');
   const [replyLoading, setReplyLoading] = useState(false);
   const handleReplySubmit = async (parentId) => {
+    if (!user) return requireLogin();
     const trimmed = replyInput.trim();
     if (!trimmed || replyLoading) return;
     setReplyLoading(true);
@@ -213,6 +220,7 @@ export default function PostDetailPage() {
   // [FEATURE:comment-likes] 댓글 좋아요 토글 — 서버가 {liked, likeCount} 반환, 해당 댓글만 갱신.
   const [likeLoadingId, setLikeLoadingId] = useState(null);
   const handleCommentLike = async (commentId) => {
+    if (!user) return requireLogin();
     if (likeLoadingId) return;
     setLikeLoadingId(commentId);
     try {
@@ -379,6 +387,7 @@ export default function PostDetailPage() {
             {!isReply && (
               <button
                 onClick={() => {
+                  if (!user) return requireLogin();
                   setReplyingTo(replyingTo === comment.id ? null : comment.id);
                   setReplyInput('');
                 }}
@@ -604,7 +613,7 @@ export default function PostDetailPage() {
             </button>
 
             <button
-              onClick={() => setReportOpen(true)}
+              onClick={() => (user ? setReportOpen(true) : requireLogin())}
               className="flex items-center gap-2 px-4 py-2 text-sm font-mono border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors ml-auto"
             >
               <Flag size={14} />
@@ -666,7 +675,7 @@ export default function PostDetailPage() {
               type="text"
               value={commentInput}
               onChange={(e) => setCommentInput(e.target.value)}
-              placeholder="댓글을 입력하세요"
+              placeholder={user ? '댓글을 입력하세요' : '로그인하고 댓글을 남겨보세요'}
               className="flex-1 h-11 px-4 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
             />
             <button
@@ -695,6 +704,16 @@ export default function PostDetailPage() {
         danger={confirmState?.danger}
         onConfirm={handleConfirm}
         onClose={() => setConfirmState(null)}
+      />
+      {/* 게스트 로그인 유도 */}
+      <ConfirmDialog
+        open={loginPromptOpen}
+        title="로그인이 필요합니다"
+        message="로그인하고 더 많은 기능을 이용해보세요."
+        confirmLabel="로그인하기"
+        cancelLabel="닫기"
+        onConfirm={() => navigate('/login')}
+        onClose={() => setLoginPromptOpen(false)}
       />
       <AlertDialog
         open={!!notice}

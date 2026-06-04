@@ -53,7 +53,15 @@ class ApplicationSmokeTest {
     @Test
     @DisplayName("보호된 API는 인증 없이 401을 반환한다")
     void test_protected_requires_auth() throws Exception {
-        mockMvc.perform(get("/api/posts/1"))
+        // /api/posts(GET)는 게스트 공개 읽기로 열렸으므로, 여전히 보호되는 엔드포인트로 검증한다.
+        mockMvc.perform(get("/api/notifications"))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @DisplayName("게스트 공개 읽기: 전체글 목록은 인증 없이 200을 반환한다")
+    void test_public_feed_guest() throws Exception {
+        mockMvc.perform(get("/api/posts"))
+                .andExpect(status().isOk());
     }
 }

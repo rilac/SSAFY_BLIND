@@ -131,7 +131,10 @@ public class CommentService {
         if (!commentIds.isEmpty()) {
             commentLikeRepository.countByCommentIds(commentIds)
                     .forEach(r -> likeCountMap.put((Long) r[0], (Long) r[1]));
-            likedSet.addAll(commentLikeRepository.findLikedCommentIds(commentIds, currentUserId));
+            // 내 좋아요 여부는 로그인 유저만 — 게스트(null)는 빈 집합.
+            if (currentUserId != null) {
+                likedSet.addAll(commentLikeRepository.findLikedCommentIds(commentIds, currentUserId));
+            }
         }
         // [/FEATURE:comment-likes]
 

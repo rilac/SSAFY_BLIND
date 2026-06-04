@@ -44,8 +44,10 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
         String token = extractTokenFromCookie(request);
 
+        // 게스트 공개 읽기 지원: 토큰이 없으면 401하지 않고 익명으로 통과한다.
+        // 보호 리소스 차단은 SecurityConfig(authenticated + 401 엔트리포인트)가 담당.
         if (token == null) {
-            sendError(response, HttpServletResponse.SC_UNAUTHORIZED, "인증이 필요합니다.");
+            chain.doFilter(request, response);
             return;
         }
 

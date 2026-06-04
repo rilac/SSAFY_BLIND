@@ -58,8 +58,10 @@ public class PostController {
             @RequestParam(defaultValue = "latest") String sort,
             @RequestParam(defaultValue = "all") String scope) {
 
-        return ResponseEntity.ok(
-                postService.getAllPosts(page, size, user.getId(), category, keyword, sort, scope, user.getRole()));
+        // 게스트(user == null)는 공개 읽기 — userId/role을 null로 전달
+        return ResponseEntity.ok(postService.getAllPosts(page, size,
+                user != null ? user.getId() : null, category, keyword, sort, scope,
+                user != null ? user.getRole() : null));
     }
 
     /**
@@ -71,8 +73,10 @@ public class PostController {
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
 
-        // role 전달 — 숨김 글은 ADMIN만 열람
-        return ResponseEntity.ok(postService.getPost(id, user.getId(), user.getRole()));
+        // role 전달 — 숨김 글은 ADMIN만 열람. 게스트(user == null)는 null 전달(숨김글은 404).
+        return ResponseEntity.ok(postService.getPost(id,
+                user != null ? user.getId() : null,
+                user != null ? user.getRole() : null));
     }
 
     /**

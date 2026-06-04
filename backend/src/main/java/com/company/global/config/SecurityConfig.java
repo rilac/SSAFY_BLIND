@@ -2,10 +2,12 @@ package com.company.global.config;
 
 import com.company.global.security.JwtAuthFilter;
 
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -36,9 +38,17 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/auth/logout", "/api/auth/refresh").permitAll()
                         // 관측성: 헬스체크는 공개(LB/오케스트레이터용). 상세는 management.health.show-details로 제한.
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                        // 게스트 공개 읽기 — 전체글 목록·상세·댓글 조회(GET)만. 쓰기/참여는 POST라 보호 유지.
+                        .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/*", "/api/posts/*/comments").permitAll()
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
+                // 보호 리소스에 미인증 접근 → 401 JSON(프론트 client.js 인터셉터가 401을 보고 refresh/redirect).
+                .exceptionHandling(ex -> ex.authenticationEntryPoint((request, response, authException) -> {
+                        response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+                        response.setContentType("application/json;charset=UTF-8");
+                        response.getWriter().write("{\"message\":\"인증이 필요합니다.\"}");
+                }))
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
