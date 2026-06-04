@@ -133,6 +133,13 @@ export default function FeedPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authLoading, category, scope, sort, keyword, page]);
 
+  // 상세 페이지 "피드로 돌아가기"가 머물던 페이지/필터로 오도록 현재 피드 URL을 기억(탭 단위).
+  // navigate(-1)은 상세→수정→상세 경유 시 엉뚱한 곳으로 가므로, 명시적 피드 URL 복귀를 쓴다.
+  useEffect(() => {
+    const qs = searchParams.toString();
+    sessionStorage.setItem('feedReturn', qs ? `/feed?${qs}` : '/feed');
+  }, [searchParams]);
+
   // 알림 최초 로드 — 로그인 유저만(게스트가 /notifications 호출 시 401→로그인 리다이렉트되므로 호출 안 함)
   useEffect(() => {
     if (user) fetchNotifications();

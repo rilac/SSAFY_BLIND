@@ -30,6 +30,10 @@ export default function PostDetailPage() {
   const [loginPromptOpen, setLoginPromptOpen] = useState(false);
   const requireLogin = () => setLoginPromptOpen(true);
 
+  // "피드로 돌아가기" — 마지막으로 보던 피드 URL(페이지·필터)로 명시 이동(FeedPage가 sessionStorage에 기억).
+  // history 뒤로가기(navigate -1)는 상세→수정→상세 같은 경유 경로에서 수정 페이지로 가버리므로 사용하지 않는다.
+  const goToFeed = () => navigate(sessionStorage.getItem('feedReturn') || '/feed');
+
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
   const [commentInput, setCommentInput] = useState('');
@@ -126,7 +130,7 @@ export default function PostDetailPage() {
   const performDelete = async () => {
     try {
       await api.delete(`/posts/${id}`);
-      navigate('/feed');
+      goToFeed();
     } catch {
       setNotice({ title: '삭제 실패', message: '게시글 삭제에 실패했습니다.' });
     }
@@ -288,16 +292,9 @@ export default function PostDetailPage() {
   };
   // [/FEATURE:admin-moderation]
 
-  // 피드로 돌아가기 — 브라우저 뒤로가기처럼 직전 피드(페이지·필터 유지)로 복원.
-  // 직접 진입/새로고침(앱 내 이전 기록 없음)이면 /feed로 폴백. idx는 react-router가 history.state에 둔 항목 인덱스.
-  const handleBack = () => {
-    if (window.history.state?.idx > 0) navigate(-1);
-    else navigate('/feed');
-  };
-
   const backBtn = (
     <button
-      onClick={handleBack}
+      onClick={goToFeed}
       className="flex items-center gap-2 text-sm font-mono text-muted-foreground hover:text-foreground transition-colors mb-4"
     >
       <ArrowLeft size={16} />
