@@ -14,6 +14,7 @@ import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Date;
+import java.util.UUID;
 
 @Component
 public class JwtProvider {
@@ -47,6 +48,9 @@ public class JwtProvider {
     public String generateToken(Long userId, UserStatus status, UserRole role) {
         return Jwts.builder()
                 .setSubject(String.valueOf(userId))
+                // jti(고유 발급 ID) — 매 발급이 distinct JWT가 되어 팬텀(SHA-256(jwt))도 distinct.
+                // 동일 유저가 같은 초에 두 번 로그인해도 at:{phantom} 키가 충돌하지 않는다.
+                .setId(UUID.randomUUID().toString())
                 .claim("status", status.name())
                 .claim("role", role.name())    // (#1) role 클레임 추가
                 .setIssuedAt(new Date())

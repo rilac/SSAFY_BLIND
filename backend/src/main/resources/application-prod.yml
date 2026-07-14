@@ -6,6 +6,13 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  # 팬텀 토큰/RT 저장소 — 운영 Redis. 모든 값은 환경변수로 주입(폴백 없음, 미설정 시 즉시 실패).
+  data:
+    redis:
+      host: ${REDIS_HOST}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD}
+      timeout: 2s
   jpa:
     hibernate:
       # 운영에서는 직접 DDL 변경 금지 — validate로 스키마 검증만

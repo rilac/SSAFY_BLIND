@@ -27,6 +27,8 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-validation'
     implementation 'org.springframework.boot:spring-boot-starter-actuator' // 관측성 — 헬스체크
+    // 팬텀 토큰/Refresh Token 저장소 — Redis(Lettuce 기본 클라이언트). MySQL refresh_tokens 대체.
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
     // M-NEW-7: Flyway 스키마 마이그레이션(prod=validate 대비 자동 적용, 수동 DDL 대체)
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-mysql'

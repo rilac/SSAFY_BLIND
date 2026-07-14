@@ -44,7 +44,7 @@ class WeeklyDigestServiceTest {
     }
 
     @Test
-    @DisplayName("인기글이 있으면 전체 ACTIVE 유저에게 1위 글 링크로 다이제스트를 발송한다")
+    @DisplayName("인기글이 있으면 전체 ACTIVE 유저에게 1위 글 1개만 링크·제목으로 발송한다")
     void test_인기글_있으면_전체_발송() {
         Post top = post(100L, "스프링 부트 트랜잭션 정리");
         Post second = post(200L, "리액트 상태관리 비교");
@@ -58,11 +58,11 @@ class WeeklyDigestServiceTest {
         assertThat(sent).isEqualTo(3);
 
         ArgumentCaptor<String> message = ArgumentCaptor.forClass(String.class);
-        // 링크는 1위 글(100L)로, 메시지는 상위 제목 포함
+        // 링크는 1위 글(100L)로, 메시지는 1위 제목만 포함(2위 이하는 노출/링크 없음).
         verify(notificationService).notifyDigest(eq(recipients), message.capture(), eq(100L));
         assertThat(message.getValue())
                 .contains("스프링 부트 트랜잭션 정리")
-                .contains("리액트 상태관리 비교");
+                .doesNotContain("리액트 상태관리 비교");
     }
 
     @Test

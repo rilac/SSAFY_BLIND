@@ -16,8 +16,10 @@ public final class OnboardingOptions {
 
     public static final Set<String> CHARACTERS = Set.of("스타티", "핏", "와이즈", "알지");
 
-    // 현재 활동 기수만 허용 — 모집중(16기)은 제외(프론트도 선택 불가). 학기마다 갱신 필요.
-    public static final Set<String> COHORTS = Set.of("14기", "15기");
+    // 현재 활동(재학) 기수만 허용 — 학기마다 갱신 필요. 이 집합은 온보딩 검증 + 로그인 재활성화 게이트의
+    // 단일 진실원(single source of truth)이다. 여기서 빠진 기수는 졸업으로 간주되어 로그인이 차단된다.
+    // 2026-07: 14기 졸업 → 제외, 16기 입학 → 추가.
+    public static final Set<String> COHORTS = Set.of("15기", "16기");
 
     public static final Set<String> CAMPUSES = Set.of("서울", "대전", "광주", "부울경", "구미");
 

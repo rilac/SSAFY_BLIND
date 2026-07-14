@@ -10,9 +10,10 @@ const ADJECTIVES = [
   '대담한', '세심한', '낙관적인', '침착한',
 ];
 const CHARACTERS = ['스타티', '핏', '와이즈', '알지'];
-// 현재 운영 기수. 16기는 모집 중이라 UI엔 노출하되 선택 불가(RECRUITING_COHORTS).
-const COHORTS = ['14기', '15기', '16기'];
-const RECRUITING_COHORTS = ['16기'];
+// 현재 운영(재학) 기수 — 백엔드 OnboardingOptions.COHORTS와 1:1 동기 유지.
+// 2026-07: 14기 졸업(제외), 16기 입학(활성화). 모집중 기수 없음.
+const COHORTS = ['15기', '16기'];
+const RECRUITING_COHORTS = [];
 const CAMPUSES = ['서울', '대전', '광주', '부울경', '구미'];
 
 // 온보딩 — 닉네임(형용사+캐릭터) + 기수 + 캠퍼스 → POST /onboarding {nickname, cohort, campus}

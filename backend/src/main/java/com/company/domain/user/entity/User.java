@@ -83,6 +83,22 @@ public class User implements UserDetails {
         this.role = UserRole.ADMIN;
     }
 
+    // R8: 관리자 차단 — 재로그인/재발급 불가. (탈퇴 계정은 차단 대상 아님)
+    public void block() {
+        if (this.status == UserStatus.WITHDRAWN) {
+            throw new InvalidStateException("탈퇴한 계정은 차단할 수 없습니다.");
+        }
+        this.status = UserStatus.BLOCKED;
+    }
+
+    // R8: 차단 해제 — 온보딩 완료 이력이 있으면 ACTIVE, 아니면 PENDING으로 복원.
+    public void unblock() {
+        if (this.status != UserStatus.BLOCKED) {
+            throw new InvalidStateException("차단된 계정만 차단 해제할 수 있습니다.");
+        }
+        this.status = (this.nickname != null && this.cohort != null) ? UserStatus.ACTIVE : UserStatus.PENDING;
+    }
+
     // 회원 탈퇴 — PII 익명화 + 재로그인 매칭 불가 처리. 게시글/댓글은 FK 보존.
     public void withdraw() {
         this.nickname = null;

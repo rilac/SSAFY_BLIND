@@ -3,10 +3,8 @@ package com.company.domain.user.service;
 import com.company.domain.user.controller.dto.OnboardingRequest;
 import com.company.domain.user.entity.OnboardingOptions;
 import com.company.domain.user.entity.User;
-import com.company.domain.user.entity.UserStatus;
 import com.company.domain.user.repository.UserRepository;
 import com.company.global.exception.InvalidStateException;
-import com.company.global.security.JwtProvider;
 
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -17,13 +15,17 @@ import org.springframework.transaction.annotation.Transactional;
 public class OnboardingService {
 
     private final UserRepository userRepository;
-    private final JwtProvider jwtProvider;
 
     /**
-     * 온보딩 완료: 닉네임/기수/캠퍼스 설정 → PENDING→ACTIVE 전환 → 새 JWT 발급
+     * 온보딩 완료: 닉네임/기수/캠퍼스 설정 → PENDING→ACTIVE 전환.
+     *
+     * <p>토큰 재발급은 하지 않는다 — JwtAuthFilter가 매 요청 DB 상태를 재확인하므로
+     * 로그인 시 발급된 팬텀 쿠키가 ACTIVE 전환 즉시 그대로 유효하다. (팬텀 토큰 개편 전에는
+     * 여기서 새 JWT를 쿠키로 재발급했는데, 그대로 두면 원문 JWT가 클라이언트에 노출되고
+     * 팬텀이 아닌 쿠키는 Redis 해석에 실패해 온보딩 직후 세션이 끊긴다.)
      */
     @Transactional
-    public String completeOnboarding(Long userId, OnboardingRequest request) {
+    public void completeOnboarding(Long userId, OnboardingRequest request) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new InvalidStateException("존재하지 않는 유저입니다."));
 
@@ -44,8 +46,5 @@ public class OnboardingService {
 
         // 도메인 메서드로 상태 변경 — @Setter 사용 금지. 검증·정규화(trim)된 값으로 저장.
         user.completeOnboarding(nickname, cohort, campus);
-
-        // (#1) ACTIVE 상태 + 기존 role을 유지하여 새 JWT 발급
-        return jwtProvider.generateToken(user.getId(), UserStatus.ACTIVE, user.getRole());
     }
 }

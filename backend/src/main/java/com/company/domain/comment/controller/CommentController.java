@@ -45,8 +45,8 @@ public class CommentController {
             @AuthenticationPrincipal User user,
             @PathVariable Long postId) {
 
-        // 게스트(user == null)도 댓글 조회 가능 — userId null 전달
-        return ResponseEntity.ok(commentService.getComments(postId, user != null ? user.getId() : null));
+        // R5: 로그인 필수 — user는 항상 인증된 principal(null 아님).
+        return ResponseEntity.ok(commentService.getComments(postId, user.getId()));
     }
 
     /**

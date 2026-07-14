@@ -1,11 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Eye, EyeOff, Trash2, RotateCcw, Shield, CheckCircle2, XCircle } from 'lucide-react';
+import { ArrowLeft, Eye, EyeOff, Trash2, RotateCcw, Shield, CheckCircle2, XCircle, KeyRound } from 'lucide-react';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatTimestamp } from '../lib/format';
 import AlertDialog from '../components/AlertDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
+import AdminUserManagement from '../components/AdminUserManagement';
+
+// R8: 관리자 API가 2차 인증(step-up)을 요구할 때의 신호 — 403 { code: 'STEP_UP_REQUIRED' }.
+const isStepUpRejection = (result) =>
+  result.status === 'rejected' &&
+  result.reason?.response?.status === 403 &&
+  result.reason?.response?.data?.code === 'STEP_UP_REQUIRED';
+
+// 개별 액션의 catch용 — step-up 마커(15분)가 만료된 뒤의 액션 실패를 감지해 재인증 게이트를 다시 띄운다.
+const isStepUpError = (err) =>
+  err?.response?.status === 403 && err?.response?.data?.code === 'STEP_UP_REQUIRED';
 
 const REASON_LABELS = {
   GAMBLING_OR_ADULT: '사행성·선정성',
@@ -39,6 +50,12 @@ export default function AdminPage() {
   const [showProcessed, setShowProcessed] = useState(false); // 건의함: 처리된 건의 보기 토글
   const [processedFeedback, setProcessedFeedback] = useState([]);
   const [processedLoaded, setProcessedLoaded] = useState(false); // 처리됨 목록 1회 조회 캐시
+  // R8: 관리자 2차 인증(step-up) 게이트
+  const [needStepUp, setNeedStepUp] = useState(false);
+  const [stepUpCode, setStepUpCode] = useState('');
+  const [stepUpError, setStepUpError] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [reload, setReload] = useState(0); // step-up 통과 후 재조회 트리거
 
   useEffect(() => {
     if (!user) return;
@@ -54,6 +71,13 @@ export default function AdminPage() {
         api.get('/admin/reports/stats'), // [FEATURE:report-dashboard]
         api.get('/admin/feedback'),
       ]);
+      // R8: 2차 인증이 필요하면 콘텐츠 대신 코드 입력 게이트를 노출.
+      if ([reportedResult, statsResult, feedbackResult].some(isStepUpRejection)) {
+        setNeedStepUp(true);
+        setLoading(false);
+        return;
+      }
+      setNeedStepUp(false);
       if (reportedResult.status === 'fulfilled') {
         setReported(reportedResult.value.data);
       } else {
@@ -74,7 +98,25 @@ export default function AdminPage() {
       setLoading(false);
     };
     fetchAll();
-  }, [user, navigate]);
+  }, [user, navigate, reload]);
+
+  // R8: 관리자 코드 검증 → 성공 시 15분 step-up 부여 후 재조회.
+  const handleVerify = async (e) => {
+    e.preventDefault();
+    setVerifying(true);
+    setStepUpError('');
+    try {
+      await api.post('/admin/verify', { code: stepUpCode });
+      setStepUpCode('');
+      setNeedStepUp(false);
+      setLoading(true);
+      setReload((r) => r + 1);
+    } catch (err) {
+      setStepUpError(err.response?.data?.message || '관리자 인증에 실패했습니다.');
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const handleRestore = async (id) => {
     try {
@@ -83,7 +125,8 @@ export default function AdminPage() {
       setReported((prev) =>
         prev.map((p) => (p.postId === id ? { ...p, hidden: false, reviewed: true } : p))
       );
-    } catch {
+    } catch (err) {
+      if (isStepUpError(err)) { setNeedStepUp(true); return; }
       setNotice({ title: '복원 실패', message: '복원에 실패했습니다.' });
     }
   };
@@ -93,7 +136,8 @@ export default function AdminPage() {
     try {
       await api.post(`/admin/posts/${id}/hide`);
       setReported((prev) => prev.map((p) => (p.postId === id ? { ...p, hidden: true } : p)));
-    } catch {
+    } catch (err) {
+      if (isStepUpError(err)) { setNeedStepUp(true); return; }
       setNotice({ title: '숨김 실패', message: '숨김 처리에 실패했습니다.' });
     }
   };
@@ -112,7 +156,8 @@ export default function AdminPage() {
     try {
       await api.delete(`/posts/${id}`);
       setReported((prev) => prev.filter((p) => p.postId !== id));
-    } catch {
+    } catch (err) {
+      if (isStepUpError(err)) { setNeedStepUp(true); return; }
       setNotice({ title: '삭제 실패', message: '삭제에 실패했습니다.' });
     }
   };
@@ -130,7 +175,8 @@ export default function AdminPage() {
       await api.patch(`/admin/feedback/${id}/status`, { status });
       setFeedback((prev) => prev.filter((f) => f.id !== id));
       setProcessedLoaded(false);
-    } catch {
+    } catch (err) {
+      if (isStepUpError(err)) { setNeedStepUp(true); return; }
       setNotice({ title: '처리 실패', message: '건의 상태 변경에 실패했습니다.' });
     }
   };
@@ -145,7 +191,8 @@ export default function AdminPage() {
         const res = await api.get('/admin/feedback', { params: { processed: true } });
         setProcessedFeedback(res.data);
         setProcessedLoaded(true);
-      } catch {
+      } catch (err) {
+        if (isStepUpError(err)) { setNeedStepUp(true); return; }
         setNotice({ title: '조회 실패', message: '처리된 건의를 불러오지 못했습니다.' });
       }
     }
@@ -171,7 +218,36 @@ export default function AdminPage() {
           <h1 className="text-2xl font-mono">관리자</h1>
         </div>
 
-        {loading ? (
+        {needStepUp ? (
+          /* R8: 2차 인증 게이트 — 관리자 권한 + 별도 코드 입력 */
+          <div className="max-w-md mx-auto border border-border bg-card p-8">
+            <div className="flex items-center gap-2 mb-2">
+              <KeyRound size={18} className="text-primary" />
+              <h2 className="text-lg font-mono font-semibold">관리자 2차 인증</h2>
+            </div>
+            <p className="text-sm font-mono text-muted-foreground mb-6">
+              관리자 페이지 접근을 위해 관리자 코드를 입력해주세요. (15분간 유지)
+            </p>
+            <form onSubmit={handleVerify} className="space-y-4">
+              <input
+                type="password"
+                value={stepUpCode}
+                onChange={(e) => setStepUpCode(e.target.value)}
+                placeholder="관리자 코드"
+                autoFocus
+                className="w-full h-12 px-4 bg-input-background border border-border text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+              />
+              {stepUpError && <p className="text-sm text-destructive font-mono">{stepUpError}</p>}
+              <button
+                type="submit"
+                disabled={verifying || !stepUpCode}
+                className="w-full h-12 bg-primary text-primary-foreground font-mono text-sm hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {verifying ? '인증 중...' : '인증'}
+              </button>
+            </form>
+          </div>
+        ) : loading ? (
           <p className="text-sm font-mono text-muted-foreground">불러오는 중...</p>
         ) : (
           <div className="space-y-10">
@@ -332,6 +408,12 @@ export default function AdminPage() {
               )}
               <Pager page={feedbackView.current} pageCount={feedbackView.pageCount} onChange={setFeedbackPage} />
             </section>
+
+            {/* R8: 회원 관리 — 검색/차단/차단해제. step-up 만료 시 재인증 게이트로 복귀 */}
+            <AdminUserManagement
+              onError={(message) => setNotice({ title: '오류', message })}
+              onStepUpRequired={() => setNeedStepUp(true)}
+            />
           </div>
         )}
       </div>

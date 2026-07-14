@@ -6,7 +6,6 @@ import com.company.domain.user.entity.UserRole;
 import com.company.domain.user.entity.UserStatus;
 import com.company.domain.user.repository.UserRepository;
 import com.company.global.exception.InvalidStateException;
-import com.company.global.security.JwtProvider;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,7 +18,6 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 // (#6) OnboardingService 단위 테스트 + 화이트리스트 서버 검증
@@ -29,9 +27,6 @@ class OnboardingServiceTest {
     @Mock
     private UserRepository userRepository;
 
-    @Mock
-    private JwtProvider jwtProvider;
-
     @InjectMocks
     private OnboardingService onboardingService;
 
@@ -40,15 +35,13 @@ class OnboardingServiceTest {
     void test_PENDING_유저_온보딩_완료시_ACTIVE_전환() {
         User pendingUser = pendingUser(1L);
         given(userRepository.findById(1L)).willReturn(Optional.of(pendingUser));
-        given(jwtProvider.generateToken(any(), any(), any())).willReturn("new-jwt-token");
 
-        String token = onboardingService.completeOnboarding(1L, request("긍정적인 알지", "15기", "서울"));
+        onboardingService.completeOnboarding(1L, request("긍정적인 알지", "15기", "서울"));
 
         assertThat(pendingUser.getStatus()).isEqualTo(UserStatus.ACTIVE);
         assertThat(pendingUser.getNickname()).isEqualTo("긍정적인 알지");
         assertThat(pendingUser.getCohort()).isEqualTo("15기");
         assertThat(pendingUser.getCampus()).isEqualTo("서울");
-        assertThat(token).isEqualTo("new-jwt-token");
     }
 
     @Test
@@ -90,12 +83,13 @@ class OnboardingServiceTest {
     }
 
     @Test
-    @DisplayName("모집중(16기) 기수는 서버에서도 거부된다")
-    void test_모집중_기수_거부() {
+    @DisplayName("졸업(비활동) 기수(14기)는 서버에서도 거부된다")
+    void test_졸업_기수_거부() {
         User pendingUser = pendingUser(1L);
         given(userRepository.findById(1L)).willReturn(Optional.of(pendingUser));
 
-        assertThatThrownBy(() -> onboardingService.completeOnboarding(1L, request("긍정적인 알지", "16기", "서울")))
+        // 2026-07: 14기 졸업으로 화이트리스트에서 제외 → 온보딩 거부.
+        assertThatThrownBy(() -> onboardingService.completeOnboarding(1L, request("긍정적인 알지", "14기", "서울")))
                 .isInstanceOf(InvalidStateException.class);
     }
 

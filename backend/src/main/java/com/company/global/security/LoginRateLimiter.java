@@ -43,7 +43,8 @@ public class LoginRateLimiter {
     /** 로그인 시도 전 호출 — IP 또는 loginId가 차단 중이면 429를 던진다. */
     public void checkAllowed(String ip, String loginId) {
         if (isBlocked(ipKey(ip)) || isBlocked(idKey(loginId))) {
-            log.warn("로그인 레이트리밋 차단: ip={}, loginId={}", ip, loginId);
+            // 익명성: 원문 IP/loginId를 로그에 남기지 않는다(마스킹/해시).
+            log.warn("로그인 레이트리밋 차단: ip={}, loginId={}", maskIp(ip), maskLoginId(loginId));
             throw new TooManyRequestsException("로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요.");
         }
     }
@@ -52,8 +53,9 @@ public class LoginRateLimiter {
     public void recordFailure(String ip, String loginId) {
         boolean ipBlocked = increment(ipKey(ip));
         boolean idBlocked = increment(idKey(loginId));
+        // 익명성: 원문 IP/loginId를 로그에 남기지 않는다(마스킹/해시). 상관관계는 requestId(MDC)로 추적.
         log.warn("로그인 실패(audit): ip={}, loginId={}, ipBlocked={}, idBlocked={}",
-                ip, loginId, ipBlocked, idBlocked);
+                maskIp(ip), maskLoginId(loginId), ipBlocked, idBlocked);
     }
 
     /** 로그인 성공 시 호출 — 해당 loginId/IP 카운트를 초기화한다. */
@@ -100,6 +102,18 @@ public class LoginRateLimiter {
     private String ipKey(String ip) { return "ip:" + ip; }
 
     private String idKey(String loginId) { return "id:" + loginId; }
+
+    // 로그 노출용 마스킹 — IP는 마지막 옥텟만 가림, loginId는 첫 글자만 남기고 가림(원문 미노출).
+    private String maskIp(String ip) {
+        if (ip == null || ip.isBlank()) return "?";
+        int lastDot = ip.lastIndexOf('.');
+        return lastDot > 0 ? ip.substring(0, lastDot + 1) + "***" : "***";
+    }
+
+    private String maskLoginId(String loginId) {
+        if (loginId == null || loginId.isBlank()) return "?";
+        return loginId.charAt(0) + "***";
+    }
 
     private static class Counter {
         long windowStart;

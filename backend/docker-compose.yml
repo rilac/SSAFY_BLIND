@@ -1,0 +1,29 @@
+# SSAFY_BLIND 로컬 인프라 — Redis(팬텀 토큰/Refresh Token 저장소).
+# 사용: docker compose up -d   (Docker Desktop 필요)
+# MySQL·백엔드는 이 파일이 관리하지 않는다(기존대로 외부/로컬 실행).
+#
+# REDIS_PASSWORD: 레포 루트 .env로 override 가능(.env는 .gitignore됨). 미설정 시 로컬 전용 기본값 사용.
+# application-dev.yml의 spring.data.redis.password 기본값과 일치시켜야 백엔드가 붙는다.
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: ssafy-redis
+    ports:
+      # 루프백 전용 바인딩 — 백엔드가 같은 호스트에서 접속하므로 충분하며,
+      # 방화벽 없는 서버에서 재사용해도 6379가 외부에 노출되지 않는다.
+      - "127.0.0.1:6379:6379"
+    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-ssafy_redis_dev}"]
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+    healthcheck:
+      # 단일 $ — compose가 .env 값으로 치환(command와 동일한 값 보장).
+      # $$(컨테이너 셸 확장)를 쓰면 컨테이너 안에 REDIS_PASSWORD가 없어 기본값으로만 인증해,
+      # 비밀번호를 바꾸는 순간 헬스체크가 영구 unhealthy가 된다.
+      test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD:-ssafy_redis_dev}\" ping | grep PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  redis-data: {}

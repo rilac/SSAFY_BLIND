@@ -7,10 +7,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.CorsConfiguration;
@@ -38,8 +39,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/login", "/api/auth/logout", "/api/auth/refresh").permitAll()
                         // 관측성: 헬스체크는 공개(LB/오케스트레이터용). 상세는 management.health.show-details로 제한.
                         .requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
-                        // 게스트 공개 읽기 — 전체글 목록·상세·댓글 조회(GET)만. 쓰기/참여는 POST라 보호 유지.
-                        .requestMatchers(HttpMethod.GET, "/api/posts", "/api/posts/*", "/api/posts/*/comments").permitAll()
+                        // R5: 게스트 공개 읽기 제거 — 모든 기능은 로그인 필수(익명성 보장). 조회성 API도 authenticated.
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
@@ -52,6 +52,12 @@ public class SecurityConfig {
                 .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    // R8: 관리자 2차 인증 코드 해시 검증용(app.admin.access-code-hash와 대조). BCrypt.
+    @Bean
+    public PasswordEncoder passwordEncoder() {
+        return new BCryptPasswordEncoder();
     }
 
     // M-NEW-2: 허용 오리진을 app.cors.allowed-origins(콤마 구분)로 외부화.

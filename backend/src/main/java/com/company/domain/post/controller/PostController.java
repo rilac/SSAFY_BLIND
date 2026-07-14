@@ -58,10 +58,9 @@ public class PostController {
             @RequestParam(defaultValue = "latest") String sort,
             @RequestParam(defaultValue = "all") String scope) {
 
-        // 게스트(user == null)는 공개 읽기 — userId/role을 null로 전달
-        return ResponseEntity.ok(postService.getAllPosts(page, size,
-                user != null ? user.getId() : null, category, keyword, sort, scope,
-                user != null ? user.getRole() : null));
+        // R5: 로그인 필수 — user는 항상 인증된 principal(null 아님).
+        return ResponseEntity.ok(
+                postService.getAllPosts(page, size, user.getId(), category, keyword, sort, scope, user.getRole()));
     }
 
     /**
@@ -73,10 +72,8 @@ public class PostController {
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
 
-        // role 전달 — 숨김 글은 ADMIN만 열람. 게스트(user == null)는 null 전달(숨김글은 404).
-        return ResponseEntity.ok(postService.getPost(id,
-                user != null ? user.getId() : null,
-                user != null ? user.getRole() : null));
+        // role 전달 — 숨김 글은 ADMIN만 열람. R5: 로그인 필수라 user는 항상 non-null.
+        return ResponseEntity.ok(postService.getPost(id, user.getId(), user.getRole()));
     }
 
     /**

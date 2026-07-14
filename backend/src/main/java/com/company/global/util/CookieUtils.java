@@ -31,10 +31,19 @@ public class CookieUtils {
     @Value("${app.jwt.refresh-ttl:14d}")
     private Duration refreshTtl;
 
-    /** Access Token 쿠키 — 모든 API에 전송(path=/), 수명은 AT TTL과 일치. */
+    /** Access Token(팬텀) 쿠키 — 모든 API에 전송(path=/), 수명은 AT TTL과 일치. rememberMe=true용(영속). */
     public ResponseCookie createAccessCookie(String token) {
         return baseCookie(ACCESS_COOKIE_NAME, token, "/")
                 .maxAge(accessTtl.getSeconds())
+                .build();
+    }
+
+    /**
+     * R6: "로그인 상태 유지" 미체크 세션용 — maxAge를 지정하지 않은 세션 쿠키.
+     * 브라우저 종료 시 삭제된다. RT를 발급하지 않으므로 팬텀(30m) 만료 후에는 재로그인이 필요하다.
+     */
+    public ResponseCookie createSessionAccessCookie(String token) {
+        return baseCookie(ACCESS_COOKIE_NAME, token, "/")
                 .build();
     }
 

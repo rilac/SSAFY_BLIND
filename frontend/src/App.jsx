@@ -26,9 +26,13 @@ function App() {
               <OnboardingRoute><OnboardingPage /></OnboardingRoute>
             } />
 
-            {/* 공개 읽기 — 게스트도 피드 목록/상세 열람 가능(포트폴리오 데모용) */}
-            <Route path="/feed" element={<FeedPage />} />
-            <Route path="/posts/:id" element={<PostDetailPage />} />
+            {/* R5: 조회성 화면도 로그인 필수 — 게스트 접근 차단(익명성 보장) */}
+            <Route path="/feed" element={
+              <PrivateRoute><FeedPage /></PrivateRoute>
+            } />
+            <Route path="/posts/:id" element={
+              <PrivateRoute><PostDetailPage /></PrivateRoute>
+            } />
 
             {/* 보호된 라우트 */}
             <Route path="/posts/new" element={

@@ -4,6 +4,7 @@ import com.company.domain.auth.controller.dto.LoginRequest;
 import com.company.domain.auth.controller.dto.LoginResponse;
 import com.company.domain.auth.controller.dto.TokenPair;
 import com.company.domain.auth.service.AuthService;
+import com.company.domain.auth.service.RefreshTokenService;
 import com.company.domain.user.controller.dto.UserResponse;
 import com.company.domain.user.entity.User;
 import com.company.global.exception.InvalidCredentialsException;
@@ -28,6 +29,7 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService authService;
+    private final RefreshTokenService refreshTokenService; // 로그인 시 이전 세션 RT 정리
     // (#5) CookieUtils를 @Component로 변경했으므로 인스턴스 주입
     private final CookieUtils cookieUtils;
     private final LoginRateLimiter loginRateLimiter; // C-NEW-2
@@ -44,13 +46,30 @@ public class AuthController {
         loginRateLimiter.checkAllowed(clientIp, request.getLoginId());
 
         try {
-            LoginResponse result = authService.login(request.getLoginId(), request.getPassword());
+            LoginResponse result = authService.login(
+                    request.getLoginId(), request.getPassword(), request.isRememberMe());
             loginRateLimiter.recordSuccess(clientIp, request.getLoginId());
-            // 🗓️ 2026-06-02: access_token(path=/) + refresh_token(path=/api/auth) 두 쿠키 세팅
-            return ResponseEntity.ok()
-                    .header(HttpHeaders.SET_COOKIE, cookieUtils.createAccessCookie(result.getAccessToken()).toString())
-                    .header(HttpHeaders.SET_COOKIE, cookieUtils.createRefreshCookie(result.getRefreshToken()).toString())
-                    .body(Map.of("isNewUser", result.isNewUser()));
+
+            // 이전 세션의 RT가 쿠키에 남아있으면 서버측에서 폐기 — 그대로 두면 rememberMe=false
+            // 재로그인 후에도 옛 RT로 무음 갱신이 이어지고(R6 위반), 계정 전환 시 30분 뒤
+            // refresh가 이전 계정 세션으로 되돌리는 문제가 생긴다.
+            String staleRefreshToken = extractCookie(httpRequest, CookieUtils.REFRESH_COOKIE_NAME);
+            if (staleRefreshToken != null) {
+                refreshTokenService.deleteByRawToken(staleRefreshToken);
+            }
+
+            // access_token 쿠키엔 팬텀(해시)만 실린다. R6: rememberMe에 따라 쿠키 종류·RT 발급을 분기.
+            //  - 체크: 영속 access 쿠키(maxAge=30m) + refresh 쿠키(14d)
+            //  - 미체크: 세션 access 쿠키(브라우저 종료 시 만료) + RT 미발급(잔존 refresh 쿠키도 만료시킴)
+            ResponseEntity.BodyBuilder response = ResponseEntity.ok();
+            if (result.getRefreshToken() != null) {
+                response.header(HttpHeaders.SET_COOKIE, cookieUtils.createAccessCookie(result.getAccessToken()).toString());
+                response.header(HttpHeaders.SET_COOKIE, cookieUtils.createRefreshCookie(result.getRefreshToken()).toString());
+            } else {
+                response.header(HttpHeaders.SET_COOKIE, cookieUtils.createSessionAccessCookie(result.getAccessToken()).toString());
+                response.header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredRefreshCookie().toString());
+            }
+            return response.body(Map.of("isNewUser", result.isNewUser()));
         } catch (InvalidCredentialsException e) {
             // 자격증명 실패만 시도 횟수로 집계(MM 장애 503 등은 사용자 책임 아님 → 미집계)
             loginRateLimiter.recordFailure(clientIp, request.getLoginId());
@@ -92,11 +111,13 @@ public class AuthController {
 
     /**
      * POST /api/auth/logout
-     * 제시된 RT를 DB에서 삭제(세션 폐기) + 두 쿠키를 maxAge(0)으로 만료.
+     * 제시된 RT를 Redis에서 삭제 + Access 팬텀을 Redis에서 폐기(서버측 무효화) + 두 쿠키를 maxAge(0)으로 만료.
      */
     @PostMapping("/logout")
     public ResponseEntity<Void> logout(HttpServletRequest httpRequest) {
-        authService.logout(extractCookie(httpRequest, CookieUtils.REFRESH_COOKIE_NAME));
+        authService.logout(
+                extractCookie(httpRequest, CookieUtils.REFRESH_COOKIE_NAME),
+                extractCookie(httpRequest, CookieUtils.ACCESS_COOKIE_NAME));
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredAccessCookie().toString())
                 .header(HttpHeaders.SET_COOKIE, cookieUtils.createExpiredRefreshCookie().toString())

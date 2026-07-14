@@ -4,6 +4,14 @@ spring:
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+  # 팬텀 토큰/RT 저장소 — 로컬은 docker-compose(레포 루트)로 띄운 Redis(localhost:6379).
+  # REDIS_PASSWORD 기본값은 docker-compose.yml의 기본값과 일치(로컬 전용). 운영은 반드시 env로 override.
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:ssafy_redis_dev}
+      timeout: 2s
   jpa:
     hibernate:
       # M-NEW-7: Flyway가 스키마를 관리하므로 dev도 validate로 전환(기존 update 자동생성 중단).

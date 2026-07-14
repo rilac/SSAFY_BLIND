@@ -10,6 +10,7 @@ export default function LoginPage() {
   const { refreshUser } = useAuth();
   const [loginId, setLoginId] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -18,7 +19,8 @@ export default function LoginPage() {
     setError('');
     setLoading(true);
     try {
-      const res = await api.post('/auth/login', { loginId, password });
+      // rememberMe=false면 서버가 Refresh Token을 발급하지 않고 세션 쿠키만 → 브라우저 종료 시 로그아웃.
+      const res = await api.post('/auth/login', { loginId, password, rememberMe });
       await refreshUser();
       navigate(res.data.isNewUser ? '/onboarding' : '/feed');
     } catch (err) {
@@ -71,6 +73,16 @@ export default function LoginPage() {
             </div>
           </div>
 
+          <label className="flex items-center gap-2 mt-4 text-sm font-mono text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+              className="h-4 w-4 accent-primary"
+            />
+            로그인 상태 유지
+          </label>
+
           <button
             type="submit"
             disabled={loading}
@@ -83,14 +95,6 @@ export default function LoginPage() {
             Mattermost 계정으로 인증됩니다
           </p>
         </form>
-
-        {/* 게스트: 로그인 없이 피드 둘러보기 */}
-        <button
-          onClick={() => navigate('/feed')}
-          className="w-full mt-4 h-11 text-sm font-mono text-muted-foreground border border-border hover:border-primary hover:text-foreground transition-colors"
-        >
-          로그인 없이 둘러보기 →
-        </button>
       </div>
 
       <AlertDialog
