@@ -84,17 +84,37 @@ jobs:
       - name: SSH 키 설정
         env:
           SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          SSH_KEY_B64: ${{ secrets.EC2_SSH_KEY_B64 }}
           KNOWN_HOSTS: ${{ secrets.EC2_SSH_KNOWN_HOSTS }}
         run: |
           mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          # Windows에서 복사한 시크릿은 줄바꿈이 CRLF라 OpenSSH가 키를 파싱하지 못한다
-          # (Load key: error in libcrypto). \r을 제거하고 끝에 개행을 보장한다.
-          printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+
+          # base64 시크릿이 있으면 그쪽을 쓴다. 한 줄이라 줄바꿈/공백이 끼어들 여지가 없어
+          # 웹 입력창을 거치는 개인키 등록에서 가장 안전하다.
+          if [ -n "${SSH_KEY_B64:-}" ]; then
+            echo "키 출처: EC2_SSH_KEY_B64 (base64)"
+            printf '%s' "$SSH_KEY_B64" | tr -d ' \n\r' | base64 -d > ~/.ssh/deploy_key
+          else
+            echo "키 출처: EC2_SSH_KEY (raw)"
+            printf '%s\n' "$SSH_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          fi
           chmod 600 ~/.ssh/deploy_key
-          # 호스트 키를 고정해 중간자 공격을 막는다(EC2_SSH_KNOWN_HOSTS 시크릿 필수).
+
+          # 진단: 키 내용은 출력하지 않고 형태만 본다(줄 수, 헤더 일치 여부, 본문 줄길이).
+          echo "--- 키 형태 진단 ---"
+          echo "줄 수        : $(wc -l < ~/.ssh/deploy_key)"
+          echo "바이트       : $(wc -c < ~/.ssh/deploy_key)"
+          echo "CR 바이트    : $(tr -cd '\r' < ~/.ssh/deploy_key | wc -c)"
+          head -1 ~/.ssh/deploy_key | grep -q '^-----BEGIN .*PRIVATE KEY-----$' \
+            && echo "첫 줄        : BEGIN 헤더 정상" || echo "첫 줄        : BEGIN 헤더 불일치 ***"
+          tail -1 ~/.ssh/deploy_key | grep -q '^-----END .*PRIVATE KEY-----$' \
+            && echo "마지막 줄    : END 헤더 정상" || echo "마지막 줄    : END 헤더 불일치 ***"
+          echo "본문 줄길이  : $(sed -n '2,$p' ~/.ssh/deploy_key | head -n -1 | awk '{print length}' | sort -u | tr '\n' ' ')"
+
           printf '%s\n' "$KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
           chmod 600 ~/.ssh/known_hosts
-          # 키가 실제로 파싱되는지 먼저 확인 — 실패 시 전송 단계보다 원인이 명확하다.
+
+          # 키가 실제로 파싱되는지 선검증 — 실패 시 전송 단계보다 원인이 명확하다.
           ssh-keygen -y -f ~/.ssh/deploy_key > /dev/null && echo "개인키 형식 정상"
 
       - name: 산출물 전송
