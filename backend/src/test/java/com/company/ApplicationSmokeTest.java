@@ -39,6 +39,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "jwt.secret=test-only-secret-key-at-least-32-bytes-long-0123456789",
         "mattermost.base-url=http://localhost:9999",
         "app.cookie.secure=false",
+        // app.admin.access-code-hash는 application.yml에 기본값이 없어(운영 fail-fast) 미지정 시
+        // 플레이스홀더 해석 실패로 컨텍스트 자체가 뜨지 않는다. 빈 값을 주면 AdminStepUpService가
+        // fail-closed(항상 인증 실패)로 동작하므로, 부팅만 시키면서 보안 의미도 그대로 유지된다.
+        "app.admin.access-code-hash=",
 })
 class ApplicationSmokeTest {
 
