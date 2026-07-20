@@ -92,7 +92,7 @@ export default function SettingsPage() {
             <Logo size={20} className="text-primary" />
             <h1 className="text-xl font-mono tracking-tight">SSAFY_SOOP</h1>
           </div>
-          <p className="text-xs font-mono text-muted-foreground mt-1">싸피인들을_위한_대나무숲v1.4</p>
+          <p className="text-xs font-mono text-muted-foreground mt-1">싸피인들을_위한_대나무숲v2.1</p>
         </button>
         <div className="flex-1 p-4 space-y-1">
           <button
