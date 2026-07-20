@@ -1,0 +1,142 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: # Actions 탭에서 수동 재배포용
+
+# 배포가 겹치면 EC2 상태가 꼬이므로 main 배포는 항상 1개씩만 실행한다.
+# (PR CI는 ref별로 그룹이 갈리므로 서로 취소하지 않는다.)
+concurrency:
+  group: cicd-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: 빌드 & 테스트
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # ---------- 백엔드 ----------
+      - name: JDK 17 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Gradle 캐시 설정
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: 백엔드 테스트 + bootJar
+        working-directory: backend
+        run: |
+          chmod +x ./gradlew
+          ./gradlew clean build --no-daemon
+
+      # ---------- 프론트엔드 ----------
+      - name: Node 20 설치
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: 프론트엔드 의존성 설치
+        working-directory: frontend
+        run: npm ci
+
+      - name: 프론트엔드 빌드
+        working-directory: frontend
+        run: npm run build
+
+      # ---------- 산출물 전달 ----------
+      # dist는 파일이 많아 업로드가 느리므로 tar로 묶어서 넘긴다.
+      - name: dist 압축
+        if: github.event_name != 'pull_request'
+        working-directory: frontend
+        run: tar -czf ../dist.tar.gz -C dist .
+
+      - name: 산출물 업로드
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release
+          path: |
+            backend/build/libs/community-0.0.1-SNAPSHOT.jar
+            dist.tar.gz
+          retention-days: 7
+
+  deploy:
+    name: EC2 배포
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: production # 승인 게이트를 걸고 싶으면 Settings > Environments에서 설정
+    steps:
+      - name: 산출물 다운로드
+        uses: actions/download-artifact@v4
+        with:
+          name: release
+
+      - name: SSH 키 설정
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # 호스트 키를 고정해 중간자 공격을 막는다(EC2_SSH_KNOWN_HOSTS 시크릿 필수).
+          echo "${{ secrets.EC2_SSH_KNOWN_HOSTS }}" > ~/.ssh/known_hosts
+          chmod 600 ~/.ssh/known_hosts
+
+      - name: 산출물 전송
+        env:
+          EC2: ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}
+        run: |
+          scp -i ~/.ssh/deploy_key \
+            backend/build/libs/community-0.0.1-SNAPSHOT.jar "$EC2:/tmp/app-new.jar"
+          scp -i ~/.ssh/deploy_key dist.tar.gz "$EC2:/tmp/dist.tar.gz"
+
+      - name: 배포 실행
+        env:
+          EC2: ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}
+        run: |
+          ssh -i ~/.ssh/deploy_key "$EC2" 'bash -eu -o pipefail -s' <<'REMOTE'
+          echo "==> 프론트엔드 교체"
+          # 스테이징 디렉터리에 먼저 풀고 통째로 바꿔치기한다.
+          # (rm -rf 후 cp 하는 방식은 복사 중 사이트가 깨진 상태로 노출된다.)
+          sudo rm -rf /var/www/ssafy_soop.new /var/www/ssafy_soop.old
+          sudo mkdir -p /var/www/ssafy_soop.new
+          sudo tar -xzf /tmp/dist.tar.gz -C /var/www/ssafy_soop.new
+          sudo chown -R www-data:www-data /var/www/ssafy_soop.new
+          sudo chmod -R 755 /var/www/ssafy_soop.new
+          sudo mv /var/www/ssafy_soop /var/www/ssafy_soop.old
+          sudo mv /var/www/ssafy_soop.new /var/www/ssafy_soop
+          sudo systemctl reload nginx
+
+          echo "==> 백엔드 교체"
+          # 롤백용으로 직전 jar를 남긴다.
+          sudo cp -f /opt/ssafy_soop/app.jar /opt/ssafy_soop/app.jar.bak
+          sudo mv /tmp/app-new.jar /opt/ssafy_soop/app.jar
+          sudo systemctl restart ssafy_soop
+
+          echo "==> 헬스체크"
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+              echo "헬스체크 성공 (${i}회차)"
+              sudo rm -rf /var/www/ssafy_soop.old /tmp/dist.tar.gz
+              exit 0
+            fi
+            sleep 3
+          done
+
+          echo "헬스체크 실패 — 이전 버전으로 롤백합니다" >&2
+          sudo journalctl -u ssafy_soop -n 60 --no-pager >&2
+          sudo mv -f /opt/ssafy_soop/app.jar.bak /opt/ssafy_soop/app.jar
+          sudo rm -rf /var/www/ssafy_soop
+          sudo mv /var/www/ssafy_soop.old /var/www/ssafy_soop
+          sudo systemctl restart ssafy_soop
+          sudo systemctl reload nginx
+          exit 1
+          REMOTE
