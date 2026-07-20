@@ -386,3 +386,5 @@ gradle-app.setting
 .idea/
 # node_modules는 위 `node_modules/` 규칙으로 무시되나, 기존 추적분은
 # `git rm -r --cached frontend/node_modules`로 제거함.
+.env.example
+.claude/launch.json

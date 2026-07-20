@@ -43,6 +43,7 @@ export default function LoginPage() {
         <div className="mb-8 text-center">
           <h1 className="text-3xl font-mono tracking-tight mb-2">SSAFY_SOOP</h1>
           <p className="text-sm font-mono text-muted-foreground">싸피인들을_위한_대나무숲v2.1</p>
+          <p className="text-sm font-mono text-primary mt-3">16기 교육생분들 진심으로 축하하고 환영합니다!</p>
         </div>
 
         <form onSubmit={handleLogin} onKeyDown={submitOnEnter} className="border border-border bg-card p-6 sm:p-8">
