@@ -17,7 +17,7 @@ function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <div className="min-h-screen bg-background text-foreground">
+        <div className="min-h-dvh bg-background text-foreground">
           <Routes>
             {/* 공개 라우트 */}
             <Route path="/login" element={<LoginPage />} />

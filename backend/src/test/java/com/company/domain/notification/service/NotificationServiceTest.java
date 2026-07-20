@@ -20,7 +20,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -76,6 +78,36 @@ class NotificationServiceTest {
 
         assertThatThrownBy(() -> notificationService.markRead(2L, 100L))
                 .isInstanceOf(ForbiddenException.class);
+    }
+
+    @Test
+    @DisplayName("본인 알림은 삭제된다")
+    void test_알림_삭제() {
+        Notification n = Notification.builder()
+                .recipient(recipient())
+                .type(NotificationType.LIKE)
+                .message("msg")
+                .build();
+        given(notificationRepository.findById(100L)).willReturn(Optional.of(n));
+
+        notificationService.delete(1L, 100L);
+
+        verify(notificationRepository).delete(n);
+    }
+
+    @Test
+    @DisplayName("타인의 알림 삭제 시 ForbiddenException이 발생하고 삭제되지 않는다")
+    void test_타인_알림_삭제_금지() {
+        Notification n = Notification.builder()
+                .recipient(recipient()) // recipient id = 1
+                .type(NotificationType.LIKE)
+                .message("msg")
+                .build();
+        given(notificationRepository.findById(100L)).willReturn(Optional.of(n));
+
+        assertThatThrownBy(() -> notificationService.delete(2L, 100L))
+                .isInstanceOf(ForbiddenException.class);
+        verify(notificationRepository, never()).delete(any());
     }
 
     private void setId(Object obj, Long id) {

@@ -81,9 +81,9 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="h-screen w-full bg-background text-foreground flex overflow-hidden">
+    <div className="h-[100dvh] w-full bg-background text-foreground flex flex-col md:flex-row overflow-y-auto md:overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card flex flex-col">
+      <aside className="w-full md:w-64 md:shrink-0 border-b md:border-b-0 md:border-r border-border bg-card flex flex-col">
         <button
           onClick={() => navigate('/feed')}
           className="p-6 border-b border-border text-left hover:bg-muted transition-colors"
@@ -113,8 +113,8 @@ export default function SettingsPage() {
       </aside>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        <div className="max-w-3xl mx-auto p-8">
+      <div className="flex-1 min-w-0 overflow-y-auto">
+        <div className="max-w-3xl mx-auto p-4 md:p-8">
           <h1 className="text-2xl font-mono mb-8">설정</h1>
 
           <div className="space-y-6">

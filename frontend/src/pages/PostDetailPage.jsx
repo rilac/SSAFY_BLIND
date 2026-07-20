@@ -13,6 +13,7 @@ const Markdown = lazy(() => import('../components/Markdown'));
 // [/FEATURE:markdown-rendering]
 import { formatTimestamp, formatNumber } from '../lib/format';
 import { categoryLabel } from '../lib/categories';
+import { submitOnEnter } from '../lib/formEnter';
 
 // [FEATURE:reactions] 반응 종류 메타(이모지+라벨). 키는 서버 ReactionType과 일치.
 const REACTION_META = {
@@ -397,9 +398,9 @@ export default function PostDetailPage() {
           </div>
         )}
         {/* [/FEATURE:qna-accept] */}
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm flex-1">{comment.content}</p>
-          <div className="flex items-center gap-1 shrink-0">
+        <div className="flex flex-col gap-1.5 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+          <p className="text-sm flex-1 min-w-0 break-words">{comment.content}</p>
+          <div className="flex items-center gap-1 flex-wrap sm:shrink-0">
             {/* [FEATURE:comment-likes] 좋아요(따봉) — 색 테두리 토글. 좋아요 시 primary 테두리+채운 따봉 */}
             <button
               onClick={() => handleCommentLike(comment.id)}
@@ -472,8 +473,8 @@ export default function PostDetailPage() {
 
         {/* 본문 */}
         <article className="border border-border bg-card p-6 mb-4">
-          <div className="flex items-start justify-between mb-3">
-            <div className="flex items-center gap-2 text-sm font-mono flex-wrap">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between mb-3">
+            <div className="flex items-center gap-2 text-sm font-mono flex-wrap min-w-0">
               {/* [FEATURE:pinned-posts] 공지 고정 배지 */}
               {post.pinned && (
                 <span className="flex items-center gap-1 px-1.5 py-0.5 bg-primary text-primary-foreground text-[10px] font-bold leading-none">
@@ -496,7 +497,7 @@ export default function PostDetailPage() {
               </span>
             </div>
             {(post.isMine || isAdmin) && (
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
                 {/* [FEATURE:pinned-posts] 관리자 공지 고정/해제 토글 — 본인 글 여부와 무관, 관리자에게만 노출 */}
                 {isAdmin && (
                   <button
@@ -622,11 +623,11 @@ export default function PostDetailPage() {
                         style={{ width: `${pct}%` }}
                       />
                       <div className="relative flex items-center justify-between text-sm font-mono">
-                        <span className="flex items-center gap-1.5">
+                        <span className="flex items-center gap-1.5 min-w-0 break-words">
                           {mine && <Check size={12} className="text-primary" />}
                           {opt.content}
                         </span>
-                        <span className="text-muted-foreground text-xs">{pct}% · {opt.voteCount}</span>
+                        <span className="text-muted-foreground text-xs shrink-0 pl-2">{pct}% · {opt.voteCount}</span>
                       </div>
                     </button>
                   );
@@ -683,7 +684,7 @@ export default function PostDetailPage() {
 
             <button
               onClick={() => (user ? setReportOpen(true) : requireLogin())}
-              className="flex items-center gap-2 px-4 py-2 text-sm font-mono border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors ml-auto"
+              className="flex items-center gap-2 px-4 py-2 text-sm font-mono border border-border text-muted-foreground hover:border-primary hover:text-foreground transition-colors sm:ml-auto"
             >
               <Flag size={14} />
               신고
@@ -715,7 +716,8 @@ export default function PostDetailPage() {
                         e.preventDefault();
                         handleReplySubmit(comment.id);
                       }}
-                      className="flex gap-2 mt-3 ml-6"
+                      onKeyDown={submitOnEnter}
+                      className="flex gap-2 mt-3 ml-3 sm:ml-6"
                     >
                       <input
                         type="text"
@@ -724,7 +726,7 @@ export default function PostDetailPage() {
                         placeholder="답글을 입력하세요"
                         maxLength={COMMENT_MAX}
                         autoFocus
-                        className="flex-1 h-9 px-3 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+                        className="flex-1 min-w-0 h-9 px-3 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                       />
                       <button
                         type="submit"
@@ -742,14 +744,14 @@ export default function PostDetailPage() {
           )}
 
           {!post.hidden && (
-          <form onSubmit={handleCommentSubmit} className="flex gap-2">
+          <form onSubmit={handleCommentSubmit} onKeyDown={submitOnEnter} className="flex gap-2">
             <input
               type="text"
               value={commentInput}
               onChange={(e) => setCommentInput(e.target.value)}
               placeholder={user ? '댓글을 입력하세요' : '로그인하고 댓글을 남겨보세요'}
               maxLength={COMMENT_MAX}
-              className="flex-1 h-11 px-4 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
+              className="flex-1 min-w-0 h-11 px-4 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
             />
             <button
               type="submit"

@@ -97,4 +97,15 @@ public class NotificationService {
     public void markAllRead(Long userId) {
         notificationRepository.markAllRead(userId);
     }
+
+    // 단일 알림 삭제 — 본인 알림만. markRead와 동일한 소유자 검증.
+    @Transactional
+    public void delete(Long userId, Long notificationId) {
+        Notification n = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 알림입니다."));
+        if (!n.getRecipient().getId().equals(userId)) {
+            throw new ForbiddenException("본인의 알림만 삭제할 수 있습니다.");
+        }
+        notificationRepository.delete(n);
+    }
 }

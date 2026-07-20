@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import AlertDialog from '../components/AlertDialog';
+import { submitOnEnter } from '../lib/formEnter';
 
 const ADJECTIVES = [
   '열정적인', '똑똑한', '창의적인', '성실한', '긍정적인', '활발한',
@@ -48,7 +49,7 @@ export default function OnboardingPage() {
   };
 
   const chip = (active) =>
-    `px-4 py-2 text-sm font-mono border transition-colors ${
+    `px-3 py-2 sm:px-4 whitespace-nowrap text-sm font-mono border transition-colors ${
       active
         ? 'bg-primary text-primary-foreground border-primary'
         : 'bg-transparent border-border hover:border-primary'
@@ -64,11 +65,11 @@ export default function OnboardingPage() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="border border-border bg-card p-8">
+        <form onSubmit={handleSubmit} onKeyDown={submitOnEnter} className="border border-border bg-card p-4 sm:p-8">
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-mono mb-3">형용사 선택</label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
                 {ADJECTIVES.map((adj) => (
                   <button key={adj} type="button" onClick={() => setAdjective(adj)} className={chip(adjective === adj)}>
                     {adj}
@@ -79,7 +80,7 @@ export default function OnboardingPage() {
 
             <div>
               <label className="block text-sm font-mono mb-3">SSAFY 캐릭터 선택</label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {CHARACTERS.map((c) => (
                   <button
                     key={c}

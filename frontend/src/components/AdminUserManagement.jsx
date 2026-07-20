@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Search, Ban, RotateCcw, Users } from 'lucide-react';
 import api from '../api/client';
 import { formatTimestamp } from '../lib/format';
+import { submitOnEnter } from '../lib/formEnter';
 
 // R8: 관리자 회원 관리 — MM계정/닉네임 검색 + 기수/지역/상태 필터 + 차단/차단해제.
 const STATUS_LABELS = {
@@ -11,7 +12,7 @@ const COHORTS = ['15기', '16기'];
 const CAMPUSES = ['서울', '대전', '광주', '부울경', '구미'];
 const STATUSES = ['PENDING', 'ACTIVE', 'DORMANT', 'WITHDRAWN', 'BLOCKED'];
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 10;
 
 // runAdminAction: 부모(AdminPage)가 주입하는 관리자 액션 래퍼 —
 // step-up 만료면 모달로 재인증받고 막혔던 액션을 그대로 재시도한다(검색어·필터·페이지 상태 보존).
@@ -55,7 +56,7 @@ export default function AdminUserManagement({ runAdminAction }) {
     }, { title: '변경 실패', message: '상태 변경에 실패했습니다.' });
   };
 
-  const select = 'h-9 px-2 bg-input-background border border-border text-xs font-mono focus:outline-none focus:border-primary';
+  const select = 'w-full sm:w-auto h-9 px-2 bg-input-background border border-border text-xs font-mono focus:outline-none focus:border-primary';
 
   return (
     <section>
@@ -64,14 +65,14 @@ export default function AdminUserManagement({ runAdminAction }) {
         <h2 className="text-lg font-mono font-semibold tracking-tight">회원 관리</h2>
       </div>
 
-      <form onSubmit={search} className="border border-border bg-card p-4 mb-4 space-y-3">
-        <div className="flex items-center gap-2">
+      <form onSubmit={search} onKeyDown={submitOnEnter} className="border border-border bg-card p-4 mb-4 space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <input
             type="text"
             value={keyword}
             onChange={(e) => setKeyword(e.target.value)}
             placeholder="MM 계정 / 이메일 / 닉네임 검색"
-            className="flex-1 h-9 px-3 bg-input-background border border-border text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+            className="flex-1 min-w-0 basis-full sm:basis-0 h-9 px-3 bg-input-background border border-border text-sm font-mono placeholder:text-muted-foreground focus:outline-none focus:border-primary"
           />
           <button
             type="submit"
@@ -80,7 +81,7 @@ export default function AdminUserManagement({ runAdminAction }) {
             <Search size={14} /> 검색
           </button>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="grid grid-cols-2 sm:flex sm:items-center gap-2">
           <select value={cohort} onChange={(e) => setCohort(e.target.value)} className={select}>
             <option value="">전체 기수</option>
             {COHORTS.map((c) => <option key={c} value={c}>{c}</option>)}
@@ -113,7 +114,7 @@ export default function AdminUserManagement({ runAdminAction }) {
             <div key={u.id} className="border border-border bg-card p-4 flex items-center justify-between gap-3 flex-wrap">
               <div className="min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-sm font-mono font-semibold">{u.nickname || '(온보딩 전)'}</span>
+                  <span className="text-sm font-mono font-semibold break-all">{u.nickname || '(온보딩 전)'}</span>
                   <span className={`text-[10px] font-mono px-1.5 py-0.5 border ${
                     u.status === 'BLOCKED' ? 'border-destructive text-destructive' : 'border-border text-muted-foreground'
                   }`}>
@@ -132,14 +133,14 @@ export default function AdminUserManagement({ runAdminAction }) {
                 u.status === 'BLOCKED' ? (
                   <button
                     onClick={() => toggleBlock(u)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors shrink-0"
+                    className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] sm:min-h-0 text-xs font-mono border border-border hover:border-primary transition-colors shrink-0"
                   >
                     <RotateCcw size={12} /> 차단 해제
                   </button>
                 ) : (
                   <button
                     onClick={() => toggleBlock(u)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity shrink-0"
+                    className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] sm:min-h-0 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity shrink-0"
                   >
                     <Ban size={12} /> 차단
                   </button>

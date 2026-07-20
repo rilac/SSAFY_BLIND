@@ -7,10 +7,10 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
   return (
     <article
       onClick={() => onOpen(post.id)}
-      className="border border-border bg-card p-5 hover:border-primary transition-colors cursor-pointer group"
+      className="border border-border bg-card p-4 sm:p-5 hover:border-primary transition-colors cursor-pointer group"
     >
       <div className="flex items-start justify-between mb-3">
-        <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
+        <div className="flex items-center gap-x-2 gap-y-1 text-xs font-mono flex-wrap min-w-0 flex-1">
           {/* [FEATURE:admin-moderation] 숨김 글 배지 — 관리자 목록, 그리고 scope=mine일 때 작성자 본인의 글에 내려온다
               ([FEATURE:hidden-author-visibility]로 작성자가 자기 숨김 글을 목록에서 볼 수 있게 됨) */}
           {post.hidden && (
@@ -34,9 +34,9 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
           )}
           {/* [/FEATURE:unread-new] */}
           <span className="text-primary">[{categoryLabel(post.category)}]</span>
-          <span className="text-muted-foreground">{post.author?.nickname}</span>
-          <span className="text-muted-foreground opacity-50">•</span>
-          <span className="text-muted-foreground">
+          <span className="text-muted-foreground truncate max-w-[8rem]">{post.author?.nickname}</span>
+          <span className="hidden sm:inline text-muted-foreground opacity-50">•</span>
+          <span className="hidden sm:inline text-muted-foreground">
             {post.author?.cohort} {post.author?.campus}
           </span>
           <span className="text-muted-foreground opacity-50">•</span>
@@ -65,10 +65,11 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
               e.stopPropagation();
               onReport(post.id);
             }}
-            className="p-1 hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
+            className="p-2 min-w-[40px] min-h-[40px] flex items-center justify-center shrink-0 hover:bg-muted transition-colors opacity-100 md:opacity-0 md:group-hover:opacity-100"
             title="신고"
+            aria-label="신고"
           >
-            <Flag size={14} className="text-muted-foreground" />
+            <Flag size={16} className="text-muted-foreground" />
           </button>
         )}
       </div>
@@ -83,7 +84,7 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
       </h2>
 
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4 text-xs font-mono text-muted-foreground">
+        <div className="flex items-center gap-3 sm:gap-4 flex-wrap min-w-0 text-xs font-mono text-muted-foreground">
           <span className="flex items-center gap-1.5">
             <Eye size={14} />
             {formatNumber(post.viewCount)}
@@ -106,12 +107,13 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
               e.stopPropagation();
               onToggleBookmark(post.id);
             }}
-            className={`p-1.5 transition-colors ${
+            className={`p-2.5 min-w-[40px] min-h-[40px] inline-flex items-center justify-center shrink-0 transition-colors ${
               post.isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
             }`}
             title="스크랩"
+            aria-label="스크랩"
           >
-            <Bookmark size={14} fill={post.isBookmarked ? 'currentColor' : 'none'} />
+            <Bookmark size={16} fill={post.isBookmarked ? 'currentColor' : 'none'} />
           </button>
         )}
       </div>

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { POST_CATEGORIES, CATEGORY_LABELS } from '../lib/categories';
+import { submitOnEnter } from '../lib/formEnter';
 
 // [FEATURE:content-counter] 백엔드 @Size(PostCreateRequest/PostUpdateRequest)와 일치 — 클라이언트단 1차 차단, 서버가 최종 방어선.
 const TITLE_MAX = 200;
@@ -37,17 +38,17 @@ export default function PostForm({ initialValues, submitLabel, submitting, error
   };
 
   return (
-    <form onSubmit={handleSubmit} className="border border-border bg-card p-8 space-y-6">
+    <form onSubmit={handleSubmit} onKeyDown={submitOnEnter} className="border border-border bg-card p-4 sm:p-8 space-y-6">
       {/* Category */}
       <div>
         <label className="block text-sm font-mono mb-3">카테고리</label>
-        <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
           {POST_CATEGORIES.map((id) => (
             <button
               key={id}
               type="button"
               onClick={() => setCategory(id)}
-              className={`px-4 py-2 text-sm font-mono border transition-colors ${
+              className={`px-2 py-2 sm:px-4 text-sm font-mono border transition-colors ${
                 category === id
                   ? 'bg-primary text-primary-foreground border-primary'
                   : 'bg-transparent border-border hover:border-primary'
@@ -90,7 +91,7 @@ export default function PostForm({ initialValues, submitLabel, submitting, error
         <div className="flex items-baseline justify-between gap-2 mb-2">
           <label className="block text-sm font-mono">
             내용
-            <span className="ml-2 text-xs text-muted-foreground">
+            <span className="hidden sm:inline ml-2 text-xs text-muted-foreground">
               마크다운 지원 · `코드` ```코드블록``` # 제목 **굵게** - 목록
             </span>
           </label>

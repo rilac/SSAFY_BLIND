@@ -10,6 +10,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import AdminUserManagement from '../components/AdminUserManagement';
 import AdminAuditLog from '../components/AdminAuditLog';
 import StepUpDialog from '../components/StepUpDialog';
+import { submitOnEnter } from '../lib/formEnter';
 
 const REASON_LABELS = {
   GAMBLING_OR_ADULT: '사행성·선정성',
@@ -213,7 +214,7 @@ export default function AdminPage() {
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground overflow-y-auto">
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="max-w-4xl mx-auto p-4 sm:p-6">
         <button
           onClick={() => navigate('/feed')}
           className="flex items-center gap-2 text-sm font-mono text-muted-foreground hover:text-foreground transition-colors mb-4"
@@ -237,7 +238,7 @@ export default function AdminPage() {
             <p className="text-sm font-mono text-muted-foreground mb-6">
               관리자 페이지 접근을 위해 관리자 코드를 입력해주세요. (15분간 유지)
             </p>
-            <form onSubmit={handleVerify} className="space-y-4">
+            <form onSubmit={handleVerify} onKeyDown={submitOnEnter} className="space-y-4">
               <input
                 type="password"
                 value={stepUpCode}
@@ -275,7 +276,7 @@ export default function AdminPage() {
                   {reportedView.slice.map((p) => (
                     <div key={p.postId} className="border border-border bg-card p-5">
                       <div className="flex items-start justify-between gap-4 mb-2">
-                        <h3 className="text-base font-semibold flex-1">{p.title}</h3>
+                        <h3 className="text-base font-semibold flex-1 min-w-0 break-words">{p.title}</h3>
                         {p.hidden ? (
                           <span className="text-[10px] font-mono px-2 py-1 border border-destructive text-destructive shrink-0">
                             숨김
@@ -313,7 +314,7 @@ export default function AdminPage() {
                       <div className="flex items-center gap-2 flex-wrap">
                         <button
                           onClick={() => navigate(`/posts/${p.postId}`)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
+                          className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] sm:min-h-0 text-xs font-mono border border-border hover:border-primary transition-colors"
                         >
                           <Eye size={12} />
                           상세보기
@@ -322,7 +323,7 @@ export default function AdminPage() {
                         {p.hidden ? (
                           <button
                             onClick={() => handleRestore(p.postId)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] sm:min-h-0 text-xs font-mono border border-border hover:border-primary transition-colors"
                           >
                             <RotateCcw size={12} />
                             숨김 해제
@@ -330,7 +331,7 @@ export default function AdminPage() {
                         ) : (
                           <button
                             onClick={() => handleHide(p.postId)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
+                            className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] sm:min-h-0 text-xs font-mono border border-border hover:border-primary transition-colors"
                           >
                             <EyeOff size={12} />
                             숨김
@@ -338,7 +339,7 @@ export default function AdminPage() {
                         )}
                         <button
                           onClick={() => requestDelete(p.postId)}
-                          className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity"
+                          className="flex items-center gap-1.5 px-3 py-2 min-h-[44px] sm:min-h-0 text-xs font-mono border border-destructive text-destructive hover:opacity-80 transition-opacity"
                         >
                           <Trash2 size={12} />
                           삭제
@@ -373,7 +374,7 @@ export default function AdminPage() {
                   {feedbackView.slice.map((f) => (
                     <div key={f.id} className="border border-border bg-card p-5">
                       <div className="flex items-start justify-between gap-3 mb-2">
-                        <h3 className="text-base font-semibold flex-1">{f.title}</h3>
+                        <h3 className="text-base font-semibold flex-1 min-w-0 break-words">{f.title}</h3>
                         {f.status && f.status !== 'PENDING' && (
                           <span
                             className={`text-[10px] font-mono px-2 py-1 border shrink-0 ${
@@ -386,7 +387,7 @@ export default function AdminPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm whitespace-pre-wrap mb-3">{f.content}</p>
+                      <p className="text-sm whitespace-pre-wrap mb-3 break-words">{f.content}</p>
                       <div className="flex items-center justify-between gap-3 flex-wrap">
                         <div className="text-xs font-mono text-muted-foreground">
                           {f.author?.nickname} · {f.author?.cohort} {f.author?.campus} ·{' '}
@@ -479,7 +480,7 @@ function ReportStats({ stats }) {
           <div className="space-y-2">
             {stats.byReason.map((r) => (
               <div key={r.reason} className="flex items-center gap-2 text-xs font-mono">
-                <span className="w-24 shrink-0 text-muted-foreground truncate" title={r.label}>
+                <span className="w-20 sm:w-24 shrink-0 text-muted-foreground truncate" title={r.label}>
                   {r.label}
                 </span>
                 <div className="flex-1 bg-muted h-4">
@@ -499,11 +500,11 @@ function ReportStats({ stats }) {
           <h3 className="text-sm font-mono text-muted-foreground mb-3">
             최근 {stats.daily.length}일 신고 추이
           </h3>
-          <div className="flex items-end gap-1 h-24">
+          <div className="flex items-end gap-px h-24 overflow-x-auto">
             {stats.daily.map((d) => (
               <div
                 key={d.date}
-                className="flex-1 bg-primary/80 hover:bg-primary transition-colors"
+                className="flex-1 min-w-[6px] bg-primary/80 hover:bg-primary transition-colors"
                 style={{ height: `${(d.count / maxDaily) * 100}%`, minHeight: d.count > 0 ? '3px' : '1px' }}
                 title={`${d.date} · ${d.count}건`}
               />

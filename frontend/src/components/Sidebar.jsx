@@ -48,9 +48,11 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`${
-        sidebarOpen ? 'w-64' : 'w-0'
-      } transition-all duration-300 border-r border-border bg-card flex flex-col overflow-hidden`}
+      className={`w-64 shrink-0 border-r border-border bg-card flex flex-col
+        fixed inset-y-0 left-0 z-40 transition-transform duration-300
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+        md:static md:z-auto md:translate-x-0 md:transition-all
+        ${sidebarOpen ? 'md:w-64' : 'md:w-0 md:overflow-hidden'}`}
     >
       {/* 헤더 — 클릭 시 피드로 */}
       <button

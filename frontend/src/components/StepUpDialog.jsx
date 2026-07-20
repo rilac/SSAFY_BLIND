@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X, KeyRound } from 'lucide-react';
 import api from '../api/client';
+import { submitOnEnter } from '../lib/formEnter';
 
 /**
  * R8: 관리자 2차 인증(step-up) 모달.
@@ -44,21 +45,21 @@ export default function StepUpDialog({ open, onClose, onVerified }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/50 p-4 sm:p-6"
       onClick={onClose}
     >
-      <div className="w-full max-w-md bg-card border border-border" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md max-h-[85dvh] overflow-y-auto bg-card border border-border" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <div className="flex items-center gap-2">
             <KeyRound size={18} className="text-primary" />
             <h2 className="text-base font-mono">관리자 2차 인증</h2>
           </div>
-          <button onClick={onClose} className="p-1 hover:bg-muted transition-colors">
+          <button onClick={onClose} className="-mr-2 p-2 hover:bg-muted transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <form onSubmit={handleVerify} className="p-6 space-y-4">
+        <form onSubmit={handleVerify} onKeyDown={submitOnEnter} className="p-4 sm:p-6 space-y-4">
           <p className="text-sm font-mono text-muted-foreground">
             관리자 작업을 계속하려면 관리자 코드를 입력해주세요. (15분간 유지)
           </p>

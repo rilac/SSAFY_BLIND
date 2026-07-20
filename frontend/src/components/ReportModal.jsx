@@ -29,18 +29,18 @@ export default function ReportModal({ open, onClose, onSubmit, submitting }) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-6"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 sm:p-6"
       onClick={onClose}
     >
-      <div className="w-full max-w-md bg-card border border-border" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-md max-h-[90dvh] overflow-y-auto bg-card border border-border" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 border-b border-border">
           <h2 className="text-base font-mono">게시글 신고</h2>
-          <button onClick={onClose} className="p-1 hover:bg-muted transition-colors">
+          <button onClick={onClose} className="-mr-2 p-2 hover:bg-muted transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        <div className="p-6 space-y-2">
+        <div className="p-4 sm:p-6 space-y-2">
           <p className="text-sm font-mono text-muted-foreground mb-3">신고 사유를 선택해주세요</p>
           {REASONS.map((r) => (
             <label

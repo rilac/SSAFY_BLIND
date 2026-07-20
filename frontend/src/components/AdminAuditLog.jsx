@@ -105,7 +105,7 @@ export default function AdminAuditLog({ runAdminAction }) {
                 </span>
               )}
               {l.detail && <span className="text-muted-foreground opacity-70 break-all">{l.detail}</span>}
-              {l.ip && <span className="ml-auto text-muted-foreground opacity-50 shrink-0">{l.ip}</span>}
+              {l.ip && <span className="sm:ml-auto text-muted-foreground opacity-50 shrink-0">{l.ip}</span>}
             </div>
           ))}
         </div>

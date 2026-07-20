@@ -43,4 +43,13 @@ public class NotificationController {
         notificationService.markAllRead(user.getId());
         return ResponseEntity.noContent().build();
     }
+
+    /**
+     * DELETE /api/notifications/{id} — 단일 알림 삭제(숨기기)
+     */
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@AuthenticationPrincipal User user, @PathVariable Long id) {
+        notificationService.delete(user.getId(), id);
+        return ResponseEntity.noContent().build();
+    }
 }

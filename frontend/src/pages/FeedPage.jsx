@@ -92,7 +92,9 @@ export default function FeedPage() {
   const [searchInput, setSearchInput] = useState(keyword);
 
   // UI 상태
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  // 사이드바 초깃값: 데스크톱(md≥768)은 펼침, 모바일은 접힘(오버레이 드로어).
+  // Vite CSR이라 window가 항상 존재한다(SSR 아님).
+  const [sidebarOpen, setSidebarOpen] = useState(() => window.innerWidth >= 768);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
@@ -211,8 +213,14 @@ export default function FeedPage() {
     }
   };
 
+  // 모바일 드로어에서 항목 선택 시 자동 닫힘 — 안 닫으면 선택 후에도 드로어가 본문을 계속 덮는다.
+  const closeSidebarOnMobile = () => {
+    if (window.innerWidth < 768) setSidebarOpen(false);
+  };
+
   const handleSelectCategory = (c) => {
     updateParams({ scope: null, category: c === 'all' ? null : c });
+    closeSidebarOnMobile();
   };
 
   // (버그픽스) 스코프(라운지·내 글·스크랩) 선택 시 카테고리를 all로 리셋한다.
@@ -221,6 +229,7 @@ export default function FeedPage() {
   // 스코프는 '모든 카테고리'를 보는 독립 뷰이므로 선택 시 category=all로 통일한다.
   const handleSelectScope = (s) => {
     updateParams({ category: null, scope: s === 'all' ? null : s });
+    closeSidebarOnMobile();
   };
 
   // 사이드바 로그아웃 클릭 → 즉시 로그아웃하지 않고 확인 모달을 연다(사용자 메뉴는 닫음).
@@ -257,8 +266,26 @@ export default function FeedPage() {
     setNotifications((prev) => prev.map((x) => ({ ...x, isRead: true })));
   };
 
+  // 알림 삭제 — 목록에서 즉시 제거(낙관적). 실패 시 서버 상태와 어긋날 수 있으나 다음 조회에서 복원된다.
+  const handleDeleteNotification = async (id) => {
+    setNotifications((prev) => prev.filter((x) => x.id !== id));
+    try {
+      await api.delete(`/notifications/${id}`);
+    } catch {
+      /* 삭제 실패 — 다음 알림 조회 시 목록이 서버 기준으로 복원됨 */
+    }
+  };
+
   return (
-    <div className="h-screen w-full bg-background text-foreground flex overflow-hidden">
+    <div className="h-dvh w-full bg-background text-foreground flex overflow-hidden">
+      {/* 모바일 드로어 백드롭 — 사이드바가 fixed 오버레이라 열렸을 때 본문을 덮는다. md 이상에선 숨김. */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 md:hidden"
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+        />
+      )}
       <Sidebar
         sidebarOpen={sidebarOpen}
         category={category}
@@ -276,7 +303,7 @@ export default function FeedPage() {
         onLogin={() => navigate('/login')}
       />
 
-      <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
         <TopBar
           sidebarOpen={sidebarOpen}
           searchValue={searchInput}
@@ -292,18 +319,19 @@ export default function FeedPage() {
           onToggleNotifications={() => setNotificationsOpen((o) => !o)}
           onNotificationClick={handleNotificationClick}
           onMarkAllRead={handleMarkAllRead}
+          onDeleteNotification={handleDeleteNotification}
           onSortChange={(s) => updateParams({ sort: s === 'latest' ? null : s })}
         />
 
         <main ref={mainRef} className="flex-1 overflow-y-auto">
-          <div className="max-w-4xl mx-auto p-6">
+          <div className="max-w-4xl mx-auto p-4 sm:p-6">
             {/* [FEATURE:category-descriptions] 제목 옆 카테고리/라운지 설명 문구 */}
             <div className="mb-4">
-              <div className="flex items-baseline gap-2 flex-wrap">
+              <div className="flex flex-col sm:flex-row sm:items-baseline gap-1 sm:gap-2 sm:flex-wrap">
                 <h2 className="text-lg font-mono font-semibold tracking-tight">{viewLabel(scope, category, user)}</h2>
-                <span className="text-sm font-mono text-muted-foreground">— {viewDescription(scope, category, user)}</span>
+                <span className="text-sm font-mono text-muted-foreground"><span className="hidden sm:inline">— </span>{viewDescription(scope, category, user)}</span>
                 {keyword && (
-                  <span className="ml-auto text-xs font-mono text-muted-foreground">SEARCH: "{keyword}"</span>
+                  <span className="sm:ml-auto text-xs font-mono text-muted-foreground">SEARCH: "{keyword}"</span>
                 )}
               </div>
             </div>
@@ -312,7 +340,7 @@ export default function FeedPage() {
             {loading ? (
               <p className="text-sm font-mono text-muted-foreground py-12 text-center">불러오는 중...</p>
             ) : posts.length === 0 ? (
-              <div className="border border-border bg-card p-12 text-center">
+              <div className="border border-border bg-card p-6 sm:p-12 text-center">
                 <FileText size={32} className="mx-auto mb-3 text-muted-foreground opacity-50" />
                 <p className="text-sm font-mono text-muted-foreground">표시할 게시글이 없습니다</p>
                 <p className="text-xs font-mono text-muted-foreground opacity-70 mt-1.5">
@@ -386,11 +414,11 @@ export default function FeedPage() {
 function Pager({ page, pageCount, onChange }) {
   if (pageCount <= 1) return null;
   return (
-    <div className="flex items-center justify-center gap-3 text-xs font-mono">
+    <div className="flex items-center justify-center gap-2 sm:gap-3 flex-wrap text-xs font-mono">
       <button
         onClick={() => onChange(page - 1)}
         disabled={page <= 1}
-        className="px-3 py-1.5 border border-border hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="px-4 py-2.5 min-h-[44px] sm:min-h-0 sm:py-1.5 shrink-0 border border-border hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         이전
       </button>
@@ -398,7 +426,7 @@ function Pager({ page, pageCount, onChange }) {
       <button
         onClick={() => onChange(page + 1)}
         disabled={page >= pageCount}
-        className="px-3 py-1.5 border border-border hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+        className="px-4 py-2.5 min-h-[44px] sm:min-h-0 sm:py-1.5 shrink-0 border border-border hover:border-primary transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
       >
         다음
       </button>

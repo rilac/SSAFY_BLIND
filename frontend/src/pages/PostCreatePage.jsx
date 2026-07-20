@@ -24,7 +24,7 @@ export default function PostCreatePage() {
 
   return (
     <div className="min-h-screen w-full bg-background text-foreground overflow-y-auto">
-      <div className="max-w-3xl mx-auto p-6">
+      <div className="max-w-3xl mx-auto p-4 sm:p-6">
         <button
           onClick={() => navigate('/feed')}
           className="flex items-center gap-2 text-sm font-mono text-muted-foreground hover:text-foreground transition-colors mb-4"
