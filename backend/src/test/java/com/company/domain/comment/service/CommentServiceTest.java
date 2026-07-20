@@ -24,6 +24,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -31,6 +32,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -78,11 +80,11 @@ class CommentServiceTest {
         given(commentLikeRepository.countByCommentIds(List.of(100L)))
                 .willReturn(List.<Object[]>of(new Object[]{100L, 1L}));
 
-        CommentLikeResponse res = commentService.toggleLike(1L, 10L, 100L);
+        CommentLikeResponse res = commentService.toggleLike(1L, 10L, 100L, UserRole.USER);
 
         assertThat(res.isLiked()).isTrue();
         assertThat(res.getLikeCount()).isEqualTo(1L);
-        verify(commentLikeRepository).save(any(CommentLike.class));
+        verify(commentLikeRepository).insertIgnore(eq(100L), eq(1L), any(LocalDateTime.class));
     }
 
     @Test
@@ -94,7 +96,7 @@ class CommentServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(commentRepository.findById(100L)).willReturn(Optional.of(comment));
 
-        AcceptAnswerResponse res = commentService.toggleAcceptAnswer(1L, 10L, 100L);
+        AcceptAnswerResponse res = commentService.toggleAcceptAnswer(1L, 10L, 100L, UserRole.USER);
 
         assertThat(post.getAcceptedCommentId()).isEqualTo(100L);
         assertThat(res.acceptedCommentId()).isEqualTo(100L);
@@ -111,7 +113,7 @@ class CommentServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(commentRepository.findById(100L)).willReturn(Optional.of(comment));
 
-        AcceptAnswerResponse res = commentService.toggleAcceptAnswer(1L, 10L, 100L);
+        AcceptAnswerResponse res = commentService.toggleAcceptAnswer(1L, 10L, 100L, UserRole.USER);
 
         assertThat(post.getAcceptedCommentId()).isNull();
         assertThat(res.solved()).isFalse();
@@ -124,7 +126,7 @@ class CommentServiceTest {
         Post post = post(10L, author, PostCategory.QUESTION);
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
 
-        assertThatThrownBy(() -> commentService.toggleAcceptAnswer(2L, 10L, 100L))
+        assertThatThrownBy(() -> commentService.toggleAcceptAnswer(2L, 10L, 100L, UserRole.USER))
                 .isInstanceOf(ForbiddenException.class);
         verify(commentRepository, never()).findById(org.mockito.ArgumentMatchers.anyLong());
     }
@@ -136,7 +138,7 @@ class CommentServiceTest {
         Post post = post(10L, author, PostCategory.FREE);
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
 
-        assertThatThrownBy(() -> commentService.toggleAcceptAnswer(1L, 10L, 100L))
+        assertThatThrownBy(() -> commentService.toggleAcceptAnswer(1L, 10L, 100L, UserRole.USER))
                 .isInstanceOf(InvalidStateException.class);
     }
 
@@ -150,7 +152,7 @@ class CommentServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(commentRepository.findById(100L)).willReturn(Optional.of(comment));
 
-        assertThatThrownBy(() -> commentService.toggleAcceptAnswer(1L, 10L, 100L))
+        assertThatThrownBy(() -> commentService.toggleAcceptAnswer(1L, 10L, 100L, UserRole.USER))
                 .isInstanceOf(NoSuchElementException.class);
     }
 

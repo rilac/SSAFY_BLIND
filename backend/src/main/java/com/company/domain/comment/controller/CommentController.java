@@ -32,7 +32,7 @@ public class CommentController {
             @PathVariable Long postId,
             @Valid @RequestBody CommentCreateRequest request) {
 
-        CommentResponse response = commentService.addComment(user.getId(), postId, request);
+        CommentResponse response = commentService.addComment(user.getId(), postId, request, user.getRole());
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -46,7 +46,7 @@ public class CommentController {
             @PathVariable Long postId) {
 
         // R5: 로그인 필수 — user는 항상 인증된 principal(null 아님).
-        return ResponseEntity.ok(commentService.getComments(postId, user.getId()));
+        return ResponseEntity.ok(commentService.getComments(postId, user.getId(), user.getRole()));
     }
 
     /**
@@ -74,7 +74,7 @@ public class CommentController {
             @PathVariable Long postId,
             @PathVariable Long commentId) {
 
-        return ResponseEntity.ok(commentService.toggleAcceptAnswer(user.getId(), postId, commentId));
+        return ResponseEntity.ok(commentService.toggleAcceptAnswer(user.getId(), postId, commentId, user.getRole()));
     }
     // [/FEATURE:qna-accept]
 
@@ -88,7 +88,7 @@ public class CommentController {
             @PathVariable Long postId,
             @PathVariable Long commentId) {
 
-        return ResponseEntity.ok(commentService.toggleLike(user.getId(), postId, commentId));
+        return ResponseEntity.ok(commentService.toggleLike(user.getId(), postId, commentId, user.getRole()));
     }
     // [/FEATURE:comment-likes]
 }

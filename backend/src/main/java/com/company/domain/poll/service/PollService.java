@@ -8,16 +8,17 @@ import com.company.domain.poll.repository.PollVoteRepository;
 import com.company.domain.post.entity.Post;
 import com.company.domain.post.repository.PostRepository;
 import com.company.domain.user.entity.User;
+import com.company.domain.user.entity.UserRole;
 import com.company.domain.user.repository.UserRepository;
 import com.company.global.exception.InvalidStateException;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -68,7 +69,14 @@ public class PollService {
 
     // 투표 토글 — 같은 보기 재클릭=취소, 다른 보기=변경, 처음=신규. 1인 1표.
     @Transactional
-    public PollResponse vote(Long userId, Long postId, Long optionId) {
+    public PollResponse vote(Long userId, Long postId, Long optionId, UserRole role) {
+        // [FEATURE:hidden-author-visibility] post 로드를 최상단으로 올려 숨김 게이트를 먼저 통과시킨다.
+        // 아래 신규 투표 분기의 중복 findById를 흡수하므로 신규 경로의 쿼리 수는 그대로다.
+        // 순서 주의: 숨김 판정이 "투표가 없는 게시글" 검사보다 앞서야 제3자에게 글의 존재가 새지 않는다.
+        Post gatePost = postRepository.findById(postId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+        gatePost.assertWritable(role, userId);
+
         List<PollOption> options = pollOptionRepository.findByPostIdOrderBySortOrderAsc(postId);
         if (options.isEmpty()) {
             throw new NoSuchElementException("투표가 없는 게시글입니다.");
@@ -86,15 +94,12 @@ public class PollService {
                 v.changeOption(optionId); // 다른 보기 → 변경(dirty checking)
             }
         } else {
-            User user = userRepository.findById(userId)
-                    .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
-            Post post = postRepository.findById(postId)
-                    .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
-            try {
-                pollVoteRepository.save(PollVote.builder().post(post).user(user).optionId(optionId).build());
-            } catch (DataIntegrityViolationException e) {
-                // 동시 첫 투표 경합 — 이미 투표된 것으로 간주(유니크 제약)
+            // INSERT IGNORE가 FK 위반까지 삼키므로 존재 확인 가드를 남긴다(제거 금지).
+            if (!userRepository.existsById(userId)) {
+                throw new NoSuchElementException("존재하지 않는 유저입니다.");
             }
+            // 멱등 삽입 — 동시 첫 투표 경합이면 0행(1인 1표는 유니크 제약이 보장).
+            pollVoteRepository.insertIgnore(postId, userId, optionId, LocalDateTime.now());
         }
         return buildResults(postId, userId, options);
     }

@@ -22,6 +22,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -29,6 +30,7 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -90,13 +92,13 @@ class PollServiceTest {
         given(pollOptionRepository.findByPostIdOrderBySortOrderAsc(10L))
                 .willReturn(List.of(option(100L), option(101L)));
         given(pollVoteRepository.findByPostIdAndUserId(10L, 1L)).willReturn(Optional.empty());
-        given(userRepository.findById(1L)).willReturn(Optional.of(user(1L)));
+        given(userRepository.existsById(1L)).willReturn(true);
         given(postRepository.findById(10L)).willReturn(Optional.of(post(10L)));
         given(pollVoteRepository.countByPostIdGroupByOption(10L)).willReturn(List.of());
 
-        pollService.vote(1L, 10L, 100L);
+        pollService.vote(1L, 10L, 100L, UserRole.USER);
 
-        verify(pollVoteRepository).save(any(PollVote.class));
+        verify(pollVoteRepository).insertIgnore(eq(10L), eq(1L), eq(100L), any(LocalDateTime.class));
         verify(pollVoteRepository, never()).delete(any());
     }
 
@@ -108,11 +110,12 @@ class PollServiceTest {
                 .willReturn(List.of(option(100L), option(101L)));
         given(pollVoteRepository.findByPostIdAndUserId(10L, 1L)).willReturn(Optional.of(existing));
         given(pollVoteRepository.countByPostIdGroupByOption(10L)).willReturn(List.of());
+        given(postRepository.findById(10L)).willReturn(Optional.of(post(10L))); // 숨김 게이트가 항상 post를 로드
 
-        pollService.vote(1L, 10L, 100L);
+        pollService.vote(1L, 10L, 100L, UserRole.USER);
 
         verify(pollVoteRepository).delete(existing);
-        verify(pollVoteRepository, never()).save(any());
+        verify(pollVoteRepository, never()).insertIgnore(any(), any(), any(), any());
     }
 
     @Test
@@ -123,12 +126,13 @@ class PollServiceTest {
                 .willReturn(List.of(option(100L), option(101L)));
         given(pollVoteRepository.findByPostIdAndUserId(10L, 1L)).willReturn(Optional.of(existing));
         given(pollVoteRepository.countByPostIdGroupByOption(10L)).willReturn(List.of());
+        given(postRepository.findById(10L)).willReturn(Optional.of(post(10L))); // 숨김 게이트가 항상 post를 로드
 
-        pollService.vote(1L, 10L, 101L);
+        pollService.vote(1L, 10L, 101L, UserRole.USER);
 
         assertThat(existing.getOptionId()).isEqualTo(101L);
         verify(pollVoteRepository, never()).delete(any());
-        verify(pollVoteRepository, never()).save(any());
+        verify(pollVoteRepository, never()).insertIgnore(any(), any(), any(), any());
     }
 
     @Test
@@ -136,18 +140,20 @@ class PollServiceTest {
     void vote_잘못된보기() {
         given(pollOptionRepository.findByPostIdOrderBySortOrderAsc(10L))
                 .willReturn(List.of(option(100L), option(101L)));
+        given(postRepository.findById(10L)).willReturn(Optional.of(post(10L))); // 숨김 게이트가 항상 post를 로드
 
-        assertThatThrownBy(() -> pollService.vote(1L, 10L, 999L))
+        assertThatThrownBy(() -> pollService.vote(1L, 10L, 999L, UserRole.USER))
                 .isInstanceOf(NoSuchElementException.class);
-        verify(pollVoteRepository, never()).save(any());
+        verify(pollVoteRepository, never()).insertIgnore(any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("vote: 투표가 없는 글이면 NoSuchElementException")
     void vote_투표없음() {
         given(pollOptionRepository.findByPostIdOrderBySortOrderAsc(10L)).willReturn(List.of());
+        given(postRepository.findById(10L)).willReturn(Optional.of(post(10L))); // 숨김 게이트가 항상 post를 로드
 
-        assertThatThrownBy(() -> pollService.vote(1L, 10L, 100L))
+        assertThatThrownBy(() -> pollService.vote(1L, 10L, 100L, UserRole.USER))
                 .isInstanceOf(NoSuchElementException.class);
     }
 

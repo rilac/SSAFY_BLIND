@@ -21,9 +21,16 @@ export default function PostEditPage() {
     const fetchPost = async () => {
       try {
         const res = await api.get(`/posts/${id}`);
-        const { category, title, content, isMine } = res.data;
+        const { category, title, content, isMine, hidden } = res.data;
         // 본인 글도 관리자도 아니면 수정 불가 → 상세로 리다이렉트(관리자는 카테고리 교정 등 허용)
         if (!isMine && !isAdmin) {
+          navigate(`/posts/${id}`, { replace: true });
+          return;
+        }
+        // [FEATURE:hidden-author-visibility] 숨김 글은 서버가 수정을 400으로 막는다(검수 회피 방지).
+        // 작성자는 이제 자기 숨김 글을 볼 수 있어 /edit URL로 직접 들어올 수 있으므로, 폼을 띄우고
+        // 저장 시점에 실패시키는 대신 여기서 상세로 되돌린다(상세에 사유 배너가 있다).
+        if (hidden) {
           navigate(`/posts/${id}`, { replace: true });
           return;
         }

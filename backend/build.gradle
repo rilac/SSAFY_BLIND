@@ -45,4 +45,10 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+    // 테스트는 별도 JVM에서 포크 실행되므로 Gradle CLI의 -D 옵션이 자동으로 전달되지 않는다.
+    // GenerateAdminCodeHashTest가 -Dadmin.code를 읽으려면 명시적 전달이 필요하다.
+    // (이게 없어서 항상 기본 코드의 해시가 생성되고, 운영자가 지정한 코드와 불일치했다.)
+    if (System.getProperty('admin.code') != null) {
+        systemProperty 'admin.code', System.getProperty('admin.code')
+    }
 }

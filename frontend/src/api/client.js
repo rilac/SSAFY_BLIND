@@ -13,6 +13,24 @@ const api = axios.create({
 // 재발급 실패(RT 만료/무효)면 로그인으로 유도. 동시에 여러 요청이 401나도 refresh는 한 번만(single-flight).
 let refreshPromise = null;
 
+/**
+ * /auth/refresh 단일 호출 큐(single-flight). 진행 중인 재발급이 있으면 그 Promise를 그대로 준다.
+ *
+ * 이 탭 안의 모든 재발급은 반드시 이 함수를 거쳐야 한다 — AuthContext.checkAuth가 인터셉터를
+ * 우회해 직접 api.post('/auth/refresh')를 부르면 같은 탭에서 회전이 두 번 일어나 서버의 재사용
+ * 탐지를 자극한다. (탭 '간' 경합은 서버의 회전 유예 창이 흡수하므로 여기서 조율하지 않는다.)
+ *
+ * 리다이렉트는 하지 않는다 — 실패 처리는 호출부(인터셉터는 로그인 이동, checkAuth는 미인증 상태)의 몫.
+ */
+export function refreshSession() {
+  if (!refreshPromise) {
+    refreshPromise = api.post('/auth/refresh').finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
 function redirectToLogin() {
   window.location.href = '/login';
 }
@@ -39,13 +57,10 @@ api.interceptors.response.use(
     // 보호 리소스의 최초 401 — Access Token 만료로 보고 재발급 시도
     original._retried = true;
     try {
-      // 동시 401은 단일 refresh 호출로 큐잉(중복 재발급 방지)
-      refreshPromise = refreshPromise || api.post('/auth/refresh');
-      await refreshPromise;
-      refreshPromise = null;
+      // 동시 401은 단일 refresh 호출로 큐잉(중복 재발급 방지) — AuthContext와 같은 큐를 공유한다.
+      await refreshSession();
       return api(original); // 새 AT 쿠키로 원요청 재시도
     } catch (refreshError) {
-      refreshPromise = null;
       redirectToLogin(); // RT도 만료/무효 → 재로그인 필요
       return Promise.reject(refreshError);
     }

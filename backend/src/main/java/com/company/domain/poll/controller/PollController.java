@@ -25,6 +25,6 @@ public class PollController {
             @PathVariable Long postId,
             @Valid @RequestBody PollVoteRequest request) {
 
-        return ResponseEntity.ok(pollService.vote(user.getId(), postId, request.getOptionId()));
+        return ResponseEntity.ok(pollService.vote(user.getId(), postId, request.getOptionId(), user.getRole()));
     }
 }

@@ -31,6 +31,8 @@ class AdminUserServiceTest {
     @Mock private RefreshTokenService refreshTokenService;
     @Mock private AdminStepUpService adminStepUpService;
 
+    @Mock private AdminAuditService adminAuditService;
+
     @InjectMocks private AdminUserService adminUserService;
 
     @Test
@@ -39,7 +41,7 @@ class AdminUserServiceTest {
         User user = user(UserStatus.ACTIVE, "긍정적인 알지", "15기");
         given(userRepository.findById(10L)).willReturn(Optional.of(user));
 
-        adminUserService.block(10L);
+        adminUserService.block(99L, 10L);
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.BLOCKED);
         verify(refreshTokenService).deleteAllForUser(10L); // 내부에서 AT 팬텀까지 폐기
@@ -52,7 +54,7 @@ class AdminUserServiceTest {
         User user = user(UserStatus.WITHDRAWN, null, null);
         given(userRepository.findById(11L)).willReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> adminUserService.block(11L))
+        assertThatThrownBy(() -> adminUserService.block(99L, 11L))
                 .isInstanceOf(InvalidStateException.class);
         verify(refreshTokenService, never()).deleteAllForUser(any());
     }
@@ -63,7 +65,7 @@ class AdminUserServiceTest {
         User user = user(UserStatus.BLOCKED, "긍정적인 알지", "15기");
         given(userRepository.findById(12L)).willReturn(Optional.of(user));
 
-        adminUserService.unblock(12L);
+        adminUserService.unblock(99L, 12L);
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.ACTIVE);
     }
@@ -74,7 +76,7 @@ class AdminUserServiceTest {
         User user = user(UserStatus.BLOCKED, null, null);
         given(userRepository.findById(13L)).willReturn(Optional.of(user));
 
-        adminUserService.unblock(13L);
+        adminUserService.unblock(99L, 13L);
 
         assertThat(user.getStatus()).isEqualTo(UserStatus.PENDING);
     }
@@ -85,7 +87,7 @@ class AdminUserServiceTest {
         User user = user(UserStatus.ACTIVE, "긍정적인 알지", "15기");
         given(userRepository.findById(14L)).willReturn(Optional.of(user));
 
-        assertThatThrownBy(() -> adminUserService.unblock(14L))
+        assertThatThrownBy(() -> adminUserService.unblock(99L, 14L))
                 .isInstanceOf(InvalidStateException.class);
     }
 

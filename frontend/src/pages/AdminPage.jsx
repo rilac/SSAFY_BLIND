@@ -4,19 +4,12 @@ import { ArrowLeft, Eye, EyeOff, Trash2, RotateCcw, Shield, CheckCircle2, XCircl
 import api from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { formatTimestamp } from '../lib/format';
+import { isStepUpError, isStepUpRejection } from '../lib/stepUp';
 import AlertDialog from '../components/AlertDialog';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AdminUserManagement from '../components/AdminUserManagement';
-
-// R8: 관리자 API가 2차 인증(step-up)을 요구할 때의 신호 — 403 { code: 'STEP_UP_REQUIRED' }.
-const isStepUpRejection = (result) =>
-  result.status === 'rejected' &&
-  result.reason?.response?.status === 403 &&
-  result.reason?.response?.data?.code === 'STEP_UP_REQUIRED';
-
-// 개별 액션의 catch용 — step-up 마커(15분)가 만료된 뒤의 액션 실패를 감지해 재인증 게이트를 다시 띄운다.
-const isStepUpError = (err) =>
-  err?.response?.status === 403 && err?.response?.data?.code === 'STEP_UP_REQUIRED';
+import AdminAuditLog from '../components/AdminAuditLog';
+import StepUpDialog from '../components/StepUpDialog';
 
 const REASON_LABELS = {
   GAMBLING_OR_ADULT: '사행성·선정성',
@@ -50,8 +43,13 @@ export default function AdminPage() {
   const [showProcessed, setShowProcessed] = useState(false); // 건의함: 처리된 건의 보기 토글
   const [processedFeedback, setProcessedFeedback] = useState([]);
   const [processedLoaded, setProcessedLoaded] = useState(false); // 처리됨 목록 1회 조회 캐시
-  // R8: 관리자 2차 인증(step-up) 게이트
+  // R8: 관리자 2차 인증(step-up) — 두 경우를 구분한다.
+  // (1) needStepUp: 최초 진입 시 마커가 없어 콘텐츠를 아예 못 받은 경우 → 전체 화면 게이트가 타당.
+  // (2) stepUpOpen: 화면은 이미 떠 있는데 개별 액션만 마커 만료로 막힌 경우 → 모달.
+  //     예전엔 이때도 needStepUp을 켜서 로드된 통계·목록·검색 상태가 통째로 사라졌다.
   const [needStepUp, setNeedStepUp] = useState(false);
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null); // 재인증 후 다시 실행할 액션
   const [stepUpCode, setStepUpCode] = useState('');
   const [stepUpError, setStepUpError] = useState('');
   const [verifying, setVerifying] = useState(false);
@@ -118,29 +116,48 @@ export default function AdminPage() {
     }
   };
 
-  const handleRestore = async (id) => {
+  // 관리자 액션 공통 래퍼 — step-up 만료면 모달로 재인증받고 막혔던 액션을 그대로 이어서 실행한다.
+  // 화면을 게이트로 갈아끼우지 않으므로 로드된 콘텐츠·검색 상태가 보존된다.
+  const runAdminAction = async (action, failure) => {
     try {
+      await action();
+    } catch (err) {
+      if (isStepUpError(err)) {
+        setPendingAction(() => action); // setState(fn)은 updater로 해석되므로 함수를 한 겹 감싼다
+        setStepUpOpen(true);
+        return;
+      }
+      setNotice(failure);
+    }
+  };
+
+  const handleStepUpVerified = async () => {
+    setStepUpOpen(false);
+    const action = pendingAction;
+    setPendingAction(null);
+    if (!action) return;
+    try {
+      await action();
+    } catch {
+      setNotice({ title: '처리 실패', message: '작업을 완료하지 못했습니다. 다시 시도해주세요.' });
+    }
+  };
+
+  const handleRestore = (id) =>
+    runAdminAction(async () => {
       await api.post(`/admin/posts/${id}/restore`);
       // 복원 시 백엔드가 reviewed=true로 표시(재자동숨김 제외) — 로컬 상태도 함께 반영
       setReported((prev) =>
         prev.map((p) => (p.postId === id ? { ...p, hidden: false, reviewed: true } : p))
       );
-    } catch (err) {
-      if (isStepUpError(err)) { setNeedStepUp(true); return; }
-      setNotice({ title: '복원 실패', message: '복원에 실패했습니다.' });
-    }
-  };
+    }, { title: '복원 실패', message: '복원에 실패했습니다.' });
 
   // 신고 검수 목록에서 바로 숨김 처리(자동 숨김 임계값 전이라도 관리자가 선제적으로)
-  const handleHide = async (id) => {
-    try {
+  const handleHide = (id) =>
+    runAdminAction(async () => {
       await api.post(`/admin/posts/${id}/hide`);
       setReported((prev) => prev.map((p) => (p.postId === id ? { ...p, hidden: true } : p)));
-    } catch (err) {
-      if (isStepUpError(err)) { setNeedStepUp(true); return; }
-      setNotice({ title: '숨김 실패', message: '숨김 처리에 실패했습니다.' });
-    }
-  };
+    }, { title: '숨김 실패', message: '숨김 처리에 실패했습니다.' });
 
   const requestDelete = (id) => {
     setConfirmState({
@@ -152,15 +169,14 @@ export default function AdminPage() {
     });
   };
 
-  const performDelete = async (id) => {
-    try {
+  // 주의: 이건 /api/admin/** 이 아니라 DELETE /api/posts/{id} 라 AdminStepUpInterceptor를 지나지 않는다.
+  // 즉 가장 파괴적인 동작인데도 2차 인증 없이 실행된다(백엔드 정책 이슈 — 별도 판단 필요).
+  // runAdminAction으로 감싸 두면 서버가 나중에 이 경로에도 step-up을 걸 때 자동으로 대응된다.
+  const performDelete = (id) =>
+    runAdminAction(async () => {
       await api.delete(`/posts/${id}`);
       setReported((prev) => prev.filter((p) => p.postId !== id));
-    } catch (err) {
-      if (isStepUpError(err)) { setNeedStepUp(true); return; }
-      setNotice({ title: '삭제 실패', message: '삭제에 실패했습니다.' });
-    }
-  };
+    }, { title: '삭제 실패', message: '삭제에 실패했습니다.' });
 
   // 확인 모달 '확인' 클릭 — 모달을 닫고 저장된 액션 실행
   const handleConfirm = () => {
@@ -170,16 +186,12 @@ export default function AdminPage() {
   };
 
   // 건의 처리 — 상태 변경 후 미처리 목록에서 제거(처리됨 목록 캐시는 무효화 → 다음 토글 시 재조회)
-  const handleFeedbackStatus = async (id, status) => {
-    try {
+  const handleFeedbackStatus = (id, status) =>
+    runAdminAction(async () => {
       await api.patch(`/admin/feedback/${id}/status`, { status });
       setFeedback((prev) => prev.filter((f) => f.id !== id));
       setProcessedLoaded(false);
-    } catch (err) {
-      if (isStepUpError(err)) { setNeedStepUp(true); return; }
-      setNotice({ title: '처리 실패', message: '건의 상태 변경에 실패했습니다.' });
-    }
-  };
+    }, { title: '처리 실패', message: '건의 상태 변경에 실패했습니다.' });
 
   // 처리됨/미처리 보기 토글 — 처리됨은 최초 1회만 조회(이후 캐시, 처리 발생 시 무효화)
   const toggleProcessed = async () => {
@@ -187,14 +199,11 @@ export default function AdminPage() {
     setShowProcessed(next);
     setFeedbackPage(1);
     if (next && !processedLoaded) {
-      try {
+      await runAdminAction(async () => {
         const res = await api.get('/admin/feedback', { params: { processed: true } });
         setProcessedFeedback(res.data);
         setProcessedLoaded(true);
-      } catch (err) {
-        if (isStepUpError(err)) { setNeedStepUp(true); return; }
-        setNotice({ title: '조회 실패', message: '처리된 건의를 불러오지 못했습니다.' });
-      }
+      }, { title: '조회 실패', message: '처리된 건의를 불러오지 못했습니다.' });
     }
   };
 
@@ -409,11 +418,12 @@ export default function AdminPage() {
               <Pager page={feedbackView.current} pageCount={feedbackView.pageCount} onChange={setFeedbackPage} />
             </section>
 
-            {/* R8: 회원 관리 — 검색/차단/차단해제. step-up 만료 시 재인증 게이트로 복귀 */}
-            <AdminUserManagement
-              onError={(message) => setNotice({ title: '오류', message })}
-              onStepUpRequired={() => setNeedStepUp(true)}
-            />
+            {/* R8: 회원 관리 — 검색/차단/차단해제. step-up 만료 시 모달로 재인증 후 이어서 실행
+                (게이트로 전환하면 검색어·필터·페이지가 전부 날아간다) */}
+            <AdminUserManagement runAdminAction={runAdminAction} />
+
+            {/* 관리자 감사 로그 — 변경뿐 아니라 회원 검색·상세 조회(역-익명화 열람)도 기록된다 */}
+            <AdminAuditLog runAdminAction={runAdminAction} />
           </div>
         )}
       </div>
@@ -432,6 +442,15 @@ export default function AdminPage() {
         title={notice?.title}
         message={notice?.message}
         onClose={() => setNotice(null)}
+      />
+      {/* R8: 개별 액션이 step-up 만료로 막힌 경우 — 화면 유지한 채 모달로 재인증 후 재시도 */}
+      <StepUpDialog
+        open={stepUpOpen}
+        onClose={() => {
+          setStepUpOpen(false);
+          setPendingAction(null); // 취소 시 보류 액션을 버린다(다음 클릭에 되살아나면 안 됨)
+        }}
+        onVerified={handleStepUpVerified}
       />
     </div>
   );

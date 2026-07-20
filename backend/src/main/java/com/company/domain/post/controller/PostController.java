@@ -113,7 +113,7 @@ public class PostController {
             @PathVariable Long id,
             @Valid @RequestBody ReactionRequest request) {
 
-        return ResponseEntity.ok(postService.react(user.getId(), id, request.getType()));
+        return ResponseEntity.ok(postService.react(user.getId(), id, request.getType(), user.getRole()));
     }
 
     /**
@@ -124,7 +124,7 @@ public class PostController {
             @AuthenticationPrincipal User user,
             @PathVariable Long id) {
 
-        return ResponseEntity.ok(bookmarkService.toggle(user.getId(), id));
+        return ResponseEntity.ok(bookmarkService.toggle(user.getId(), id, user.getRole()));
     }
 
     /**
@@ -136,7 +136,7 @@ public class PostController {
             @PathVariable Long id,
             @Valid @RequestBody ReportRequest request) {
 
-        reportService.report(user.getId(), id, request.getReason(), request.getDetail());
+        reportService.report(user.getId(), id, request.getReason(), request.getDetail(), user.getRole());
         return ResponseEntity.ok().build();
     }
 }

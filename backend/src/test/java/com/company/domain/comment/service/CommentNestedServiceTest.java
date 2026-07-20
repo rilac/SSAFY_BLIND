@@ -66,7 +66,7 @@ class CommentNestedServiceTest {
         given(commentRepository.save(any(Comment.class))).willReturn(savedReply);
         given(commentRepository.findAllByPostIdOrderByCreatedAtAsc(10L)).willReturn(List.of(parent, savedReply));
 
-        commentService.addComment(2L, 10L, req);
+        commentService.addComment(2L, 10L, req, UserRole.USER);
 
         ArgumentCaptor<Comment> cap = ArgumentCaptor.forClass(Comment.class);
         verify(commentRepository).save(cap.capture());
@@ -88,7 +88,7 @@ class CommentNestedServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(commentRepository.findById(100L)).willReturn(Optional.of(parentIsReply));
 
-        assertThatThrownBy(() -> commentService.addComment(2L, 10L, req))
+        assertThatThrownBy(() -> commentService.addComment(2L, 10L, req, UserRole.USER))
                 .isInstanceOf(InvalidStateException.class);
         verify(commentRepository, never()).save(any());
     }
@@ -106,7 +106,7 @@ class CommentNestedServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(commentRepository.findById(100L)).willReturn(Optional.of(parentOnOther));
 
-        assertThatThrownBy(() -> commentService.addComment(2L, 10L, req))
+        assertThatThrownBy(() -> commentService.addComment(2L, 10L, req, UserRole.USER))
                 .isInstanceOf(NoSuchElementException.class);
         verify(commentRepository, never()).save(any());
     }
@@ -135,7 +135,7 @@ class CommentNestedServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(commentRepository.findById(100L)).willReturn(Optional.of(reply));
 
-        assertThatThrownBy(() -> commentService.toggleAcceptAnswer(1L, 10L, 100L))
+        assertThatThrownBy(() -> commentService.toggleAcceptAnswer(1L, 10L, 100L, UserRole.USER))
                 .isInstanceOf(InvalidStateException.class);
         assertThat(post.getAcceptedCommentId()).isNull();
     }

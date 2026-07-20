@@ -1,7 +1,5 @@
 package com.company.domain.admin.service;
 
-import com.company.global.exception.TooManyRequestsException;
-
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -16,20 +14,20 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-// R8: 관리자 2차 인증 — BCrypt 코드 검증 + 15분 마커 + 실패 누적 차단(fail-closed 포함)
+// R8: 관리자 2차 인증 — BCrypt 코드 검증 + 15분 마커(fail-closed 포함).
+// 실패 횟수 제한은 제거됨(정상 운영자가 자기 계정을 잠그는 문제 > 무차별 대입 위험, BCrypt 비용이 억제 담당).
 @ExtendWith(MockitoExtension.class)
 class AdminStepUpServiceTest {
 
     @Mock private StringRedisTemplate redis;
     @Mock private ValueOperations<String, String> valueOps;
     @Mock private PasswordEncoder passwordEncoder;
+    @Mock private AdminAuditService adminAuditService; // 인증 성공/실패도 감사 대상
 
     @InjectMocks private AdminStepUpService adminStepUpService;
 
@@ -47,44 +45,50 @@ class AdminStepUpServiceTest {
     }
 
     @Test
-    @DisplayName("올바른 코드면 15분 step-up 마커를 저장하고 실패 카운터를 리셋한다")
+    @DisplayName("올바른 코드면 15분 step-up 마커를 저장한다")
     void test_verify_성공() {
         setHash("$2a$10$hash");
         given(redis.opsForValue()).willReturn(valueOps);
-        given(valueOps.get("admin:stepup:fail:1")).willReturn(null);
         given(passwordEncoder.matches("correct", "$2a$10$hash")).willReturn(true);
 
         assertThat(adminStepUpService.verify(1L, "correct")).isTrue();
 
-        verify(redis).delete("admin:stepup:fail:1");
         verify(valueOps).set("admin:stepup:1", "1", Duration.ofMinutes(15));
     }
 
     @Test
-    @DisplayName("틀린 코드면 실패를 반환하고 실패 카운터를 올린다(최초 실패 시 윈도 TTL 설정)")
-    void test_verify_실패_카운터() {
+    @DisplayName("틀린 코드면 마커를 저장하지 않고 실패를 반환한다(횟수 제한 없음 — 정상 운영자 잠금 방지)")
+    void test_verify_실패() {
         setHash("$2a$10$hash");
-        given(redis.opsForValue()).willReturn(valueOps);
-        given(valueOps.get("admin:stepup:fail:1")).willReturn(null);
         given(passwordEncoder.matches("wrong", "$2a$10$hash")).willReturn(false);
-        given(valueOps.increment("admin:stepup:fail:1")).willReturn(1L);
 
         assertThat(adminStepUpService.verify(1L, "wrong")).isFalse();
 
-        verify(redis).expire("admin:stepup:fail:1", Duration.ofMinutes(10));
-        verify(valueOps, never()).set(any(), any(), any(Duration.class)); // 마커 미저장
+        verifyNoInteractions(redis); // 실패 카운터를 쓰지 않으므로 Redis 접근 자체가 없다
     }
 
     @Test
-    @DisplayName("실패 5회 누적 후에는 코드 검증 없이 429를 던진다(무차별 대입 차단)")
-    void test_verify_누적차단_429() {
+    @DisplayName("여러 번 틀려도 차단되지 않는다 — 매번 코드 검증이 그대로 수행된다")
+    void test_verify_반복실패_차단없음() {
         setHash("$2a$10$hash");
-        given(redis.opsForValue()).willReturn(valueOps);
-        given(valueOps.get("admin:stepup:fail:1")).willReturn("5");
+        given(passwordEncoder.matches("wrong", "$2a$10$hash")).willReturn(false);
 
-        assertThatThrownBy(() -> adminStepUpService.verify(1L, "whatever"))
-                .isInstanceOf(TooManyRequestsException.class);
-        verifyNoInteractions(passwordEncoder);
+        for (int i = 0; i < 10; i++) {
+            assertThat(adminStepUpService.verify(1L, "wrong")).isFalse();
+        }
+        // 예외 없이 10회 모두 검증 수행 — 무차별 대입 억제는 BCrypt 연산 비용이 담당한다.
+        verify(passwordEncoder, times(10)).matches("wrong", "$2a$10$hash");
+    }
+
+    @Test
+    @DisplayName("설정값이 BCrypt 형식이 아니면 기동 검증이 ERROR를 남긴다(예외로 앱을 죽이지는 않음)")
+    void test_기동검증_잘못된_해시() {
+        setHash("\"$2a$10$quoted-hash-would-never-match\""); // 따옴표로 감싼 값 — 실제 사고 사례
+
+        adminStepUpService.validateAccessCodeHash(); // 예외를 던지지 않아야 한다
+
+        setHash(""); // 미설정도 마찬가지
+        adminStepUpService.validateAccessCodeHash();
     }
 
     @Test

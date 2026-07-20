@@ -2,6 +2,8 @@ package com.company.domain.admin.service;
 
 import com.company.domain.admin.controller.dto.AdminReportedPostResponse;
 import com.company.domain.admin.controller.dto.ReportStatsResponse;
+import com.company.domain.admin.entity.AdminAuditAction;
+import com.company.domain.admin.entity.AdminAuditTargetType;
 import com.company.domain.post.entity.Post;
 import com.company.domain.post.entity.Report;
 import com.company.domain.post.entity.ReportReason;
@@ -32,6 +34,7 @@ public class AdminService {
 
     private final ReportRepository reportRepository;
     private final PostRepository postRepository;
+    private final AdminAuditService adminAuditService;
 
     // 신고된 게시글 목록 (신고 수 desc) — 사유별 집계 + 숨김 여부 포함
     @Transactional(readOnly = true)
@@ -61,28 +64,35 @@ public class AdminService {
 
     // 숨김 해제 (도메인 메서드)
     @Transactional
-    public void restorePost(Long postId) {
+    public void restorePost(Long actorId, Long postId) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
         post.restore();
+        adminAuditService.record(actorId, AdminAuditAction.RESTORE_POST,
+                AdminAuditTargetType.POST, postId, null);
     }
 
     // [FEATURE:admin-moderation] 관리자 선제적 숨김 — 신고 임계값(ReportService) 자동 숨김과 달리, 임의 글을 즉시 숨긴다.
     // 복원은 기존 restorePost(hidden=false, reviewed=true) 재사용.
     @Transactional
-    public void hidePost(Long postId) {
+    public void hidePost(Long actorId, Long postId) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
         post.hide();
+        adminAuditService.record(actorId, AdminAuditAction.HIDE_POST,
+                AdminAuditTargetType.POST, postId, null);
     }
     // [/FEATURE:admin-moderation]
 
     // [FEATURE:pinned-posts] 공지 고정 토글 — 관리자만(컨트롤러 /api/admin/** = ROLE_ADMIN). 토글 후 새 고정 상태 반환.
     @Transactional
-    public boolean togglePin(Long postId) {
+    public boolean togglePin(Long actorId, Long postId) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
         post.togglePin();
+        adminAuditService.record(actorId,
+                post.isPinned() ? AdminAuditAction.PIN_POST : AdminAuditAction.UNPIN_POST,
+                AdminAuditTargetType.POST, postId, null);
         return post.isPinned();
     }
     // [/FEATURE:pinned-posts]

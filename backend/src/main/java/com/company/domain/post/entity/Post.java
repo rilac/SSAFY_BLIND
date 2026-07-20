@@ -2,6 +2,8 @@ package com.company.domain.post.entity;
 
 import com.company.domain.comment.entity.Comment;
 import com.company.domain.user.entity.User;
+import com.company.domain.user.entity.UserRole;              // [FEATURE:hidden-author-visibility]
+import com.company.global.exception.InvalidStateException;   // [FEATURE:hidden-author-visibility]
 
 import jakarta.persistence.*;
 import lombok.*;
@@ -9,6 +11,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;                     // [FEATURE:hidden-author-visibility]
 
 @Entity
 @Table(name = "posts")
@@ -117,4 +120,46 @@ public class Post {
         this.acceptedCommentId = null;
     }
     // [/FEATURE:qna-accept]
+
+    // [FEATURE:hidden-author-visibility] 숨김 글 가시성/쓰기 게이트.
+    // 게시글 상세·댓글·반응·스크랩·투표·신고가 각자 다른 기준을 쓰지 않도록 도메인에 단일화한다.
+
+    /** 숨김 글을 볼 수 있는가 — 작성자 본인과 관리자만. 비로그인(viewerId=null)은 작성자일 수 없으므로 불가. */
+    public boolean isVisibleTo(UserRole role, Long viewerId) {
+        if (!this.hidden) {
+            return true;
+        }
+        if (role == UserRole.ADMIN) {
+            return true;
+        }
+        // author는 LAZY지만 hidden=true 경로에서만 접근하므로 목록 조회에 N+1을 만들지 않는다.
+        return viewerId != null && this.author != null && viewerId.equals(this.author.getId());
+    }
+
+    /**
+     * 볼 수 없으면 404. 숨김 사실 자체를 노출하지 않기 위해 403이 아니라 "존재하지 않는 게시글"로 처리한다
+     * (기존 PostService.getPost 동작과 동일).
+     */
+    public void assertVisibleTo(UserRole role, Long viewerId) {
+        if (!isVisibleTo(role, viewerId)) {
+            throw new NoSuchElementException("존재하지 않는 게시글입니다.");
+        }
+    }
+
+    /**
+     * 숨김 글에는 누구도 새 활동을 남길 수 없다 — 작성자도 관리자도.
+     *
+     * <p>작성자를 막는 이유가 핵심이다: 신고로 숨겨진 글의 내용을 무해하게 갈아치우고 관리자가 복원하는
+     * 검수 회피 경로를 차단한다. 관리자를 막는 이유는 (a) 글을 볼 수 없는 작성자에게 댓글 알림이 가고,
+     * (b) 복원 시 검수 기간에 생긴 활동이 되살아나며, (c) 반응이 인기순 집계에 섞이기 때문이다.
+     *
+     * <p>가시성을 먼저 판정한다 — 순서를 뒤집으면 제3자가 400 메시지로 글의 존재와 모더레이션 상태를 알아낸다.
+     */
+    public void assertWritable(UserRole role, Long viewerId) {
+        assertVisibleTo(role, viewerId);
+        if (this.hidden) {
+            throw new InvalidStateException("숨김 처리된 게시글에는 새 활동을 남길 수 없습니다.");
+        }
+    }
+    // [/FEATURE:hidden-author-visibility]
 }

@@ -7,9 +7,12 @@ import com.company.domain.feedback.controller.dto.FeedbackResponse;
 import com.company.domain.feedback.controller.dto.FeedbackStatusUpdateRequest;
 import com.company.domain.feedback.service.FeedbackService;
 
+import com.company.domain.user.entity.User;
+
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -36,8 +39,8 @@ public class AdminController {
      * POST /api/admin/posts/{id}/restore — 숨김 해제
      */
     @PostMapping("/posts/{id}/restore")
-    public ResponseEntity<Void> restore(@PathVariable Long id) {
-        adminService.restorePost(id);
+    public ResponseEntity<Void> restore(@AuthenticationPrincipal User admin, @PathVariable Long id) {
+        adminService.restorePost(admin.getId(), id);
         return ResponseEntity.noContent().build();
     }
 
@@ -45,8 +48,8 @@ public class AdminController {
      * [FEATURE:admin-moderation] POST /api/admin/posts/{id}/hide — 관리자 선제적 숨김. 응답 { "hidden": true }(새 상태).
      */
     @PostMapping("/posts/{id}/hide")
-    public ResponseEntity<Map<String, Boolean>> hide(@PathVariable Long id) {
-        adminService.hidePost(id);
+    public ResponseEntity<Map<String, Boolean>> hide(@AuthenticationPrincipal User admin, @PathVariable Long id) {
+        adminService.hidePost(admin.getId(), id);
         return ResponseEntity.ok(Map.of("hidden", true));
     }
     // [/FEATURE:admin-moderation]
@@ -55,8 +58,8 @@ public class AdminController {
      * [FEATURE:pinned-posts] POST /api/admin/posts/{id}/pin — 공지 고정 토글. 응답 { "pinned": bool }(새 상태).
      */
     @PostMapping("/posts/{id}/pin")
-    public ResponseEntity<Map<String, Boolean>> togglePin(@PathVariable Long id) {
-        boolean pinned = adminService.togglePin(id);
+    public ResponseEntity<Map<String, Boolean>> togglePin(@AuthenticationPrincipal User admin, @PathVariable Long id) {
+        boolean pinned = adminService.togglePin(admin.getId(), id);
         return ResponseEntity.ok(Map.of("pinned", pinned));
     }
     // [/FEATURE:pinned-posts]
@@ -85,8 +88,9 @@ public class AdminController {
      */
     @PatchMapping("/feedback/{id}/status")
     public ResponseEntity<FeedbackResponse> updateFeedbackStatus(
+            @AuthenticationPrincipal User admin,
             @PathVariable Long id,
             @Valid @RequestBody FeedbackStatusUpdateRequest request) {
-        return ResponseEntity.ok(feedbackService.updateStatus(id, request.getStatus()));
+        return ResponseEntity.ok(feedbackService.updateStatus(admin.getId(), id, request.getStatus()));
     }
 }

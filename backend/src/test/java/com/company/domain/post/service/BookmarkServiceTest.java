@@ -18,10 +18,12 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -51,12 +53,13 @@ class BookmarkServiceTest {
     void test_스크랩_추가() {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(bookmarkRepository.findByPostIdAndUserId(10L, 1L)).willReturn(Optional.empty());
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
+        given(userRepository.existsById(1L)).willReturn(true);
 
-        BookmarkResponse res = bookmarkService.toggle(1L, 10L);
+        BookmarkResponse res = bookmarkService.toggle(1L, 10L, UserRole.USER);
 
         assertThat(res.isBookmarked()).isTrue();
-        verify(bookmarkRepository).save(any(Bookmark.class));
+        // save() → 멱등 INSERT로 전환(동시 요청 시 500 방지)
+        verify(bookmarkRepository).insertIgnore(eq(10L), eq(1L), any(LocalDateTime.class));
     }
 
     @Test
@@ -66,11 +69,11 @@ class BookmarkServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(bookmarkRepository.findByPostIdAndUserId(10L, 1L)).willReturn(Optional.of(existing));
 
-        BookmarkResponse res = bookmarkService.toggle(1L, 10L);
+        BookmarkResponse res = bookmarkService.toggle(1L, 10L, UserRole.USER);
 
         assertThat(res.isBookmarked()).isFalse();
         verify(bookmarkRepository).delete(existing);
-        verify(bookmarkRepository, never()).save(any());
+        verify(bookmarkRepository, never()).insertIgnore(any(), any(), any());
     }
 
     private void setId(Object obj, Long id) {

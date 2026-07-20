@@ -6,13 +6,14 @@ import com.company.domain.post.entity.ReportReason;
 import com.company.domain.post.repository.PostRepository;
 import com.company.domain.post.repository.ReportRepository;
 import com.company.domain.user.entity.User;
+import com.company.domain.user.entity.UserRole;
 import com.company.domain.user.repository.UserRepository;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
 
 // 게시글 신고 — 신고자별 1회(멱등). 누적 5건 도달 시 자동 숨김.
@@ -28,9 +29,11 @@ public class ReportService {
     private final UserRepository userRepository;
 
     @Transactional
-    public void report(Long userId, Long postId, ReportReason reason, String detail) {
+    public void report(Long userId, Long postId, ReportReason reason, String detail, UserRole role) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+        // [FEATURE:hidden-author-visibility] 이미 숨겨진 글은 추가 신고를 받지 않는다(검수 대기 상태).
+        post.assertWritable(role, userId);
 
         // 이미 신고한 경우 멱등 처리 (재신고 무시)
         if (reportRepository.existsByPostIdAndReporterId(postId, userId)) {
@@ -40,17 +43,14 @@ public class ReportService {
         // [FEATURE:report-detail] 상세 사유는 trim, 공백뿐이면 null(주로 ETC에서만 채워짐).
         String trimmedDetail = (detail != null && !detail.isBlank()) ? detail.trim() : null;
 
-        User reporter = userRepository.findById(userId)
-                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
-        try {
-            reportRepository.save(Report.builder()
-                    .post(post)
-                    .reporter(reporter)
-                    .reason(reason)
-                    .detail(trimmedDetail) // [FEATURE:report-detail]
-                    .build());
-        } catch (DataIntegrityViolationException e) {
-            // 동시 중복 신고 — 멱등 무시
+        // INSERT IGNORE가 FK 위반까지 삼키므로 존재 확인 가드를 남긴다(제거 금지).
+        if (!userRepository.existsById(userId)) {
+            throw new NoSuchElementException("존재하지 않는 유저입니다.");
+        }
+        // 멱등 삽입 — 동시 중복 신고면 0행. 삽입되지 않았으면 임계값 재평가 없이 종료(중복 집계 방지).
+        int inserted = reportRepository.insertIgnore(
+                postId, userId, reason != null ? reason.name() : null, trimmedDetail, LocalDateTime.now());
+        if (inserted == 0) {
             return;
         }
 

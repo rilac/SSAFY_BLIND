@@ -11,13 +11,11 @@ const COHORTS = ['15기', '16기'];
 const CAMPUSES = ['서울', '대전', '광주', '부울경', '구미'];
 const STATUSES = ['PENDING', 'ACTIVE', 'DORMANT', 'WITHDRAWN', 'BLOCKED'];
 
-// step-up 마커(15분) 만료 감지 — AdminPage와 동일 판정(순환 import 방지를 위해 로컬 정의).
-const isStepUpError = (err) =>
-  err?.response?.status === 403 && err?.response?.data?.code === 'STEP_UP_REQUIRED';
-
 const PAGE_SIZE = 50;
 
-export default function AdminUserManagement({ onError, onStepUpRequired }) {
+// runAdminAction: 부모(AdminPage)가 주입하는 관리자 액션 래퍼 —
+// step-up 만료면 모달로 재인증받고 막혔던 액션을 그대로 재시도한다(검색어·필터·페이지 상태 보존).
+export default function AdminUserManagement({ runAdminAction }) {
   const [keyword, setKeyword] = useState('');
   const [cohort, setCohort] = useState('');
   const [campus, setCampus] = useState('');
@@ -32,7 +30,7 @@ export default function AdminUserManagement({ onError, onStepUpRequired }) {
   const search = async (e, nextPage = 0) => {
     e?.preventDefault();
     setLoading(true);
-    try {
+    await runAdminAction(async () => {
       const params = { size: PAGE_SIZE, page: nextPage };
       if (keyword.trim()) params.keyword = keyword.trim();
       if (cohort) params.cohort = cohort;
@@ -43,24 +41,18 @@ export default function AdminUserManagement({ onError, onStepUpRequired }) {
       setPageInfo({ totalPages: res.data.totalPages ?? 1, totalElements: res.data.totalElements ?? 0 });
       setPage(nextPage);
       setSearched(true);
-    } catch (err) {
-      if (isStepUpError(err)) { onStepUpRequired?.(); return; }
-      onError?.('회원 조회에 실패했습니다.');
-    } finally {
-      setLoading(false);
-    }
+    }, { title: '조회 실패', message: '회원 조회에 실패했습니다.' });
+    setLoading(false);
   };
 
-  const toggleBlock = async (u) => {
-    try {
-      const action = u.status === 'BLOCKED' ? 'unblock' : 'block';
+  const toggleBlock = (u) => {
+    // 재시도 시점에 u.status가 갱신돼 있을 수 있으므로 방향을 지금 값으로 고정한다.
+    const action = u.status === 'BLOCKED' ? 'unblock' : 'block';
+    return runAdminAction(async () => {
       await api.post(`/admin/users/${u.id}/${action}`);
       // 변경 반영 — 현재 페이지 재조회.
       await search(undefined, page);
-    } catch (err) {
-      if (isStepUpError(err)) { onStepUpRequired?.(); return; }
-      onError?.('상태 변경에 실패했습니다.');
-    }
+    }, { title: '변경 실패', message: '상태 변경에 실패했습니다.' });
   };
 
   const select = 'h-9 px-2 bg-input-background border border-border text-xs font-mono focus:outline-none focus:border-primary';

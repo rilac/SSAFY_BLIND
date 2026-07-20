@@ -19,12 +19,12 @@ import com.company.global.exception.ForbiddenException;
 import com.company.global.exception.InvalidStateException;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -48,12 +48,15 @@ public class CommentService {
      * 작성 후 글 작성자(본인 글 제외)에게 댓글 알림 생성
      */
     @Transactional
-    public CommentResponse addComment(Long userId, Long postId, CommentCreateRequest request) {
+    public CommentResponse addComment(Long userId, Long postId, CommentCreateRequest request, UserRole role) {
         User author = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
 
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+        // [FEATURE:hidden-author-visibility] 숨김 글에는 댓글 작성 불가 — 글을 볼 수 없는 작성자에게 알림이 가고,
+        // 복원 시 검수 기간에 생긴 댓글이 되살아난다.
+        post.assertWritable(role, userId);
 
         // [FEATURE:nested-comments] 답글이면 부모 검증: 존재·동일 글·1-depth(부모가 최상위여야 함).
         Comment parent = null;
@@ -104,10 +107,13 @@ public class CommentService {
      * (#2) currentUserId를 받아 각 댓글의 isMine 세팅
      */
     @Transactional(readOnly = true)
-    public List<CommentResponse> getComments(Long postId, Long currentUserId) {
+    public List<CommentResponse> getComments(Long postId, Long currentUserId, UserRole role) {
         // [FEATURE:op-alias] 글쓴이(OP) 식별을 위해 글 작성자 id가 필요 → existsById 대신 findById로 로드.
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+        // [FEATURE:hidden-author-visibility] 상세 조회와 동일한 게이트 — 숨김 글의 댓글이 제3자에게 새면
+        // 모더레이션이 무력화된다(기존엔 GET /posts/{id}는 404인데 댓글은 200이었다).
+        post.assertVisibleTo(role, currentUserId);
         Long postAuthorId = post.getAuthor().getId();
         // [/FEATURE:op-alias]
 
@@ -209,7 +215,7 @@ public class CommentService {
 
     // [FEATURE:comment-likes] 댓글 좋아요 토글 — 처음=추가, 재요청=취소. (comment_id,user_id) 유니크로 1인 1좋아요.
     @Transactional
-    public CommentLikeResponse toggleLike(Long userId, Long postId, Long commentId) {
+    public CommentLikeResponse toggleLike(Long userId, Long postId, Long commentId, UserRole role) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
         Comment comment = commentRepository.findById(commentId)
@@ -217,6 +223,8 @@ public class CommentService {
         if (!comment.getPost().getId().equals(postId)) {
             throw new NoSuchElementException("해당 게시글의 댓글이 아닙니다.");
         }
+        // [FEATURE:hidden-author-visibility] 이미 로드된 연관 Post 재사용(추가 조회 없음).
+        comment.getPost().assertWritable(role, userId);
 
         Optional<CommentLike> existing = commentLikeRepository.findByCommentIdAndUserId(commentId, userId);
         boolean liked;
@@ -224,12 +232,9 @@ public class CommentService {
             commentLikeRepository.delete(existing.get());
             liked = false;
         } else {
-            try {
-                commentLikeRepository.save(CommentLike.builder().comment(comment).user(user).build());
-                liked = true;
-            } catch (DataIntegrityViolationException e) {
-                liked = true; // 동시 첫 좋아요 경합 — 유니크로 1회만
-            }
+            // 멱등 삽입 — 경합이어도 최종 상태는 "좋아요됨"으로 동일. 예외가 없어 트랜잭션이 오염되지 않는다.
+            commentLikeRepository.insertIgnore(commentId, userId, LocalDateTime.now());
+            liked = true;
         }
 
         long count = commentLikeRepository.countByCommentIds(List.of(commentId)).stream()
@@ -240,9 +245,11 @@ public class CommentService {
 
     // [FEATURE:qna-accept] 답변 채택 토글 — QUESTION 글 + 질문 작성자만. 같은 답변 재요청 시 해제.
     @Transactional
-    public AcceptAnswerResponse toggleAcceptAnswer(Long userId, Long postId, Long commentId) {
+    public AcceptAnswerResponse toggleAcceptAnswer(Long userId, Long postId, Long commentId, UserRole role) {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+        // [FEATURE:hidden-author-visibility] 숨김 글에서는 채택 상태를 바꿀 수 없다.
+        post.assertWritable(role, userId);
 
         if (post.getCategory() != PostCategory.QUESTION) {
             throw new InvalidStateException("질문 글에서만 답변을 채택할 수 있습니다.");

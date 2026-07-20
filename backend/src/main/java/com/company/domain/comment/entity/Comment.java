@@ -20,7 +20,10 @@ public class Comment {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(nullable = false)
+    // 본문 최대 1000자 — CommentCreateRequest.@Size(max = 1000) 및 comments.content varchar(1000)(V15)과 일치.
+    // length를 생략하면 Hibernate 기본값 255로 매핑되어 256자↑ 댓글이 INSERT 단계에서 잘림 오류(→ 409)가 된다.
+    // 명시해야 ddl-auto=validate가 DTO 상한과 스키마의 재이탈을 기동 시점에 잡는다.
+    @Column(nullable = false, length = 1000)
     private String content;
 
     // 어떤 게시글에 달린 댓글인지

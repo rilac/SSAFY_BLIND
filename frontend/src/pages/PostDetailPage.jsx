@@ -6,6 +6,8 @@ import { useAuth } from '../context/AuthContext'; // [FEATURE:pinned-posts] 관�
 import ReportModal from '../components/ReportModal';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AlertDialog from '../components/AlertDialog';
+import StepUpDialog from '../components/StepUpDialog'; // R8: 관리자 액션의 2차 인증 재요청
+import { isStepUpError } from '../lib/stepUp';
 // [FEATURE:markdown-rendering] 마크다운 렌더러는 상세 페이지에서만 필요 → lazy 로드(초기 번들에서 분리)
 const Markdown = lazy(() => import('../components/Markdown'));
 // [/FEATURE:markdown-rendering]
@@ -19,6 +21,10 @@ const REACTION_META = {
   INFORMATIVE: { emoji: '💡', label: '정보' },
   EMPATHY: { emoji: '🤝', label: '공감' },
 };
+
+// 백엔드 CommentCreateRequest.@Size(max) 및 comments.content varchar(1000)과 일치 — 클라이언트단 1차 차단,
+// 서버 @Size가 최종 방어선. PostForm.jsx의 TITLE_MAX/CONTENT_MAX와 동일 방침.
+const COMMENT_MAX = 1000;
 
 // 게시글 상세 — 가명(닉네임·기수·지역) 노출. 카테고리 배지 + 좋아요/스크랩/신고 + 댓글.
 export default function PostDetailPage() {
@@ -255,19 +261,52 @@ export default function PostDetailPage() {
   };
   // [/FEATURE:poll]
 
+  // R8: 관리자 액션(/api/admin/**)은 2차 인증 마커(15분)를 요구한다. 마커가 없거나 만료되면 서버가
+  // 403 STEP_UP_REQUIRED를 반환하는데, 이 화면엔 재인증 수단이 없어 "실패" 문구만 뜨고 끝났다.
+  // 이제 모달로 재인증을 받고, 성공하면 막혔던 액션을 그대로 재시도한다.
+  const [stepUpOpen, setStepUpOpen] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null); // 재인증 후 다시 실행할 액션
+
+  // 관리자 액션 공통 래퍼 — step-up이 필요하면 모달을 띄우고 액션을 보관, 그 외 실패만 문구로 알린다.
+  const runAdminAction = async (action, failure) => {
+    try {
+      await action();
+    } catch (err) {
+      if (isStepUpError(err)) {
+        setPendingAction(() => action); // setState(fn)은 updater로 해석되므로 함수를 한 겹 감싼다
+        setStepUpOpen(true);
+        return;
+      }
+      setNotice(failure);
+    }
+  };
+
+  const handleStepUpVerified = async () => {
+    setStepUpOpen(false);
+    const action = pendingAction;
+    setPendingAction(null);
+    if (!action) return;
+    // 재인증 직후 재시도 — 여기서 또 실패하면 step-up 문제가 아니므로 일반 오류로 처리한다.
+    try {
+      await action();
+    } catch {
+      setNotice({ title: '처리 실패', message: '작업을 완료하지 못했습니다. 다시 시도해주세요.' });
+    }
+  };
+
   // [FEATURE:pinned-posts] 관리자 공지 고정 토글 — 서버가 새 상태 반환, 로컬 post에 반영.
   const [pinLoading, setPinLoading] = useState(false);
   const handleTogglePin = async () => {
     if (pinLoading) return;
     setPinLoading(true);
-    try {
-      const res = await api.post(`/admin/posts/${id}/pin`);
-      setPost((prev) => ({ ...prev, pinned: res.data.pinned }));
-    } catch {
-      setNotice({ title: '고정 실패', message: '공지 고정에 실패했습니다.' });
-    } finally {
-      setPinLoading(false);
-    }
+    await runAdminAction(
+      async () => {
+        const res = await api.post(`/admin/posts/${id}/pin`);
+        setPost((prev) => ({ ...prev, pinned: res.data.pinned }));
+      },
+      { title: '고정 실패', message: '공지 고정에 실패했습니다.' }
+    );
+    setPinLoading(false);
   };
   // [/FEATURE:pinned-posts]
 
@@ -276,19 +315,21 @@ export default function PostDetailPage() {
   const handleToggleHide = async () => {
     if (hideLoading) return;
     setHideLoading(true);
-    try {
-      if (post.hidden) {
-        await api.post(`/admin/posts/${id}/restore`);
-        setPost((prev) => ({ ...prev, hidden: false }));
-      } else {
-        await api.post(`/admin/posts/${id}/hide`);
-        setPost((prev) => ({ ...prev, hidden: true }));
-      }
-    } catch {
-      setNotice({ title: '처리 실패', message: '숨김 처리에 실패했습니다.' });
-    } finally {
-      setHideLoading(false);
-    }
+    // 재시도 시점에 post.hidden이 이미 바뀌어 있을 수 있으므로, 방향을 지금 값으로 고정해 둔다.
+    const wasHidden = post.hidden;
+    await runAdminAction(
+      async () => {
+        if (wasHidden) {
+          await api.post(`/admin/posts/${id}/restore`);
+          setPost((prev) => ({ ...prev, hidden: false }));
+        } else {
+          await api.post(`/admin/posts/${id}/hide`);
+          setPost((prev) => ({ ...prev, hidden: true }));
+        }
+      },
+      { title: '처리 실패', message: wasHidden ? '숨김 해제에 실패했습니다.' : '숨김 처리에 실패했습니다.' }
+    );
+    setHideLoading(false);
   };
   // [/FEATURE:admin-moderation]
 
@@ -488,8 +529,10 @@ export default function PostDetailPage() {
                   </button>
                 )}
                 {/* [/FEATURE:admin-moderation] */}
-                {/* 수정 — 본인 또는 관리자(카테고리 교정 등). 서버 updatePost가 ADMIN 허용 */}
-                {(post.isMine || isAdmin) && (
+                {/* 수정 — 본인 또는 관리자(카테고리 교정 등). 서버 updatePost가 ADMIN 허용.
+                    [FEATURE:hidden-author-visibility] 숨김 글은 서버가 400으로 막으므로(검수 회피 방지)
+                    버튼을 아예 노출하지 않는다. 삭제 버튼은 아래 별도라 이 조건의 영향을 받지 않는다. */}
+                {(post.isMine || isAdmin) && !post.hidden && (
                   <button
                     onClick={() => navigate(`/posts/${id}/edit`)}
                     className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border border-border hover:border-primary transition-colors"
@@ -518,6 +561,21 @@ export default function PostDetailPage() {
             </div>
           )}
           {/* [/FEATURE:admin-moderation] */}
+          {/* [FEATURE:hidden-author-visibility] 작성자 본인에게 보이는 안내.
+              숨김 사유(신고 누적/관리자 조치)는 구분하지 않는다 — 임계값이 고정이라 사유를 알려주면
+              "정확히 N명이 신고했다"가 드러나 신고자를 좁힐 단서가 된다. 중립 문구 하나로 통일. */}
+          {!isAdmin && post.isMine && post.hidden && (
+            <div className="mb-3 px-3 py-2 border border-destructive text-destructive text-xs font-mono">
+              <div className="flex items-center gap-2">
+                <EyeOff size={14} />
+                이 글은 커뮤니티 검토로 비공개 처리되었습니다.
+              </div>
+              <p className="mt-1 opacity-80">
+                다른 사용자에게는 보이지 않으며, 검토 중에는 수정할 수 없습니다. 문의는 건의함을 이용해주세요.
+              </p>
+            </div>
+          )}
+          {/* [/FEATURE:hidden-author-visibility] */}
 
           <h1 className="text-xl font-semibold mb-3">{post.title}</h1>
 
@@ -579,7 +637,14 @@ export default function PostDetailPage() {
           )}
           {/* [/FEATURE:poll] */}
 
-          {/* [FEATURE:reactions] 반응 바(좋아요/도움돼요/정보/공감) — 단일 좋아요 버튼 대체. 같은 종류 재클릭=취소 */}
+          {/* [FEATURE:hidden-author-visibility] 숨김 글에는 서버가 모든 쓰기를 400으로 막는다.
+              버튼을 남겨두면 누를 때마다 실패 토스트만 뜨므로 액션 바 자체를 감춘다. */}
+          {post.hidden ? (
+            <div className="pt-4 border-t border-border text-xs font-mono text-muted-foreground">
+              비공개 처리된 글에는 반응·스크랩·신고·댓글을 남길 수 없습니다.
+            </div>
+          ) : (
+          /* [FEATURE:reactions] 반응 바(좋아요/도움돼요/정보/공감) — 단일 좋아요 버튼 대체. 같은 종류 재클릭=취소 */
           <div className="flex flex-wrap items-center gap-2 pt-4 border-t border-border">
             {post.reactions?.reactions.map((r) => {
               const meta = REACTION_META[r.type];
@@ -624,6 +689,7 @@ export default function PostDetailPage() {
               신고
             </button>
           </div>
+          )}
         </article>
 
         {/* 댓글 */}
@@ -656,6 +722,7 @@ export default function PostDetailPage() {
                         value={replyInput}
                         onChange={(e) => setReplyInput(e.target.value)}
                         placeholder="답글을 입력하세요"
+                        maxLength={COMMENT_MAX}
                         autoFocus
                         className="flex-1 h-9 px-3 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
                       />
@@ -674,12 +741,14 @@ export default function PostDetailPage() {
             </div>
           )}
 
+          {!post.hidden && (
           <form onSubmit={handleCommentSubmit} className="flex gap-2">
             <input
               type="text"
               value={commentInput}
               onChange={(e) => setCommentInput(e.target.value)}
               placeholder={user ? '댓글을 입력하세요' : '로그인하고 댓글을 남겨보세요'}
+              maxLength={COMMENT_MAX}
               className="flex-1 h-11 px-4 bg-input-background border border-border text-sm placeholder:text-muted-foreground focus:outline-none focus:border-primary transition-colors"
             />
             <button
@@ -690,6 +759,7 @@ export default function PostDetailPage() {
               {commentLoading ? '...' : '작성'}
             </button>
           </form>
+          )}
         </section>
       </div>
 
@@ -724,6 +794,15 @@ export default function PostDetailPage() {
         title={notice?.title}
         message={notice?.message}
         onClose={() => setNotice(null)}
+      />
+      {/* R8: 관리자 액션이 2차 인증을 요구할 때 — 인증 후 막혔던 액션을 재시도한다. */}
+      <StepUpDialog
+        open={stepUpOpen}
+        onClose={() => {
+          setStepUpOpen(false);
+          setPendingAction(null); // 취소 시 보류 액션을 버린다(다음 클릭에 되살아나면 안 됨)
+        }}
+        onVerified={handleStepUpVerified}
       />
     </div>
   );

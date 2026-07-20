@@ -1,0 +1,14 @@
+-- 댓글 본문 길이 확장 — CommentCreateRequest.@Size(max = 1000)과 comments.content varchar(255)(V1 베이스라인)이
+-- 어긋나 있어 256~1000자 댓글이 Bean Validation을 통과한 뒤 INSERT에서 데이터 잘림으로 실패했다
+-- (DataIntegrityViolationException → GlobalExceptionHandler가 409 CONFLICT로 응답 → 사용자에겐 원인 불명의 충돌).
+--
+-- TEXT가 아니라 varchar(1000)인 이유: posts.content/feedbacks.content는 상한이 크고(10000/5000자) 긴 본문이라 TEXT지만,
+-- 댓글은 상한이 명확한 단문이라 reports.detail varchar(200) ↔ @Size(max=200)(V10)과 같은 방침이 맞다.
+-- TEXT로 두면 DB가 길이를 강제하지 않아 DTO @Size가 유일한 방어선이 되지만, varchar(1000)은 DTO 상한을
+-- 스키마에 복제하므로 Comment.content의 @Column(length = 1000)과 함께 ddl-auto=validate가 재이탈을 기동 시점에 잡는다.
+-- utf8mb4 기준 4000바이트로 InnoDB 행 제한에 여유가 크고, comments의 인덱스는 idx_comments_parent_id뿐이라 무관.
+--
+-- 기존 행은 모두 255자 이하라 확장은 무손실. H2 테스트는 flyway OFF + create-drop이라 이 변경과 무관.
+-- 주의: 255 → 256 이상 확장은 길이 표현 바이트가 1→2로 바뀌어 테이블 재생성(COPY)이 될 수 있다.
+-- comments가 크면 저트래픽 시간대에 적용할 것.
+alter table comments modify column content varchar(1000) not null;

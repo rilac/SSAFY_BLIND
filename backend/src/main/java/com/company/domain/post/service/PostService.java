@@ -1,5 +1,8 @@
 package com.company.domain.post.service;
 
+import com.company.domain.admin.entity.AdminAuditAction;
+import com.company.domain.admin.entity.AdminAuditTargetType;
+import com.company.domain.admin.service.AdminAuditService;
 import com.company.domain.comment.repository.CommentLikeRepository;
 import com.company.domain.comment.repository.CommentRepository;
 import com.company.domain.notification.repository.NotificationRepository;
@@ -16,10 +19,12 @@ import com.company.domain.post.entity.PostCategory;
 import com.company.domain.post.entity.PostLike;
 import com.company.domain.post.entity.PostView;
 import com.company.domain.post.entity.ReactionType;
+import com.company.domain.post.entity.ReportArchive;
 import com.company.domain.post.repository.BookmarkRepository;
 import com.company.domain.post.repository.PostLikeRepository;
 import com.company.domain.post.repository.PostRepository;
 import com.company.domain.post.repository.PostViewRepository;
+import com.company.domain.post.repository.ReportArchiveRepository;
 import com.company.domain.post.repository.ReportRepository;
 import com.company.domain.user.entity.User;
 import com.company.domain.user.entity.UserRole;
@@ -28,7 +33,6 @@ import com.company.global.dto.PageResponse;
 import com.company.global.exception.ForbiddenException;
 
 import lombok.RequiredArgsConstructor;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -50,10 +54,12 @@ public class PostService {
     private final CommentLikeRepository commentLikeRepository; // [FEATURE:comment-likes] 글 삭제 시 댓글 좋아요 정리
     private final BookmarkRepository bookmarkRepository;  // 스크랩
     private final ReportRepository reportRepository;       // C-NEW-1: 삭제 시 신고 정리
+    private final ReportArchiveRepository reportArchiveRepository; // 삭제 전 신고 스냅샷 보존
     private final NotificationRepository notificationRepository; // C-NEW-1: 삭제 시 알림 정리
     private final PostViewRepository postViewRepository;   // M-NEW-5: 조회수 중복 제거 이력
     private final NotificationService notificationService; // 좋아요 알림
     private final PollService pollService;                 // [FEATURE:poll] 익명 투표
+    private final AdminAuditService adminAuditService;     // 관리자 권한 수정/삭제 감사
 
     // M-NEW-5: 동일 유저의 재조회를 같은 글에 대해 이 시간 내에는 1회만 카운트.
     private static final long VIEW_DEDUP_HOURS = 24;
@@ -96,14 +102,14 @@ public class PostService {
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
 
-        // 숨김 글은 관리자가 아니면 존재하지 않는 것으로 처리(이때는 조회수도 올리지 않음)
-        if (post.isHidden() && role != UserRole.ADMIN) {
-            throw new NoSuchElementException("존재하지 않는 게시글입니다.");
-        }
+        // [FEATURE:hidden-author-visibility] 숨김 글은 작성자 본인과 관리자만 열람(그 외 404).
+        // 작성자에게 열어주는 이유: 자기 글이 왜 안 보이는지 인지할 수 있어야 한다(쓰기는 여전히 차단).
+        post.assertVisibleTo(role, currentUserId);
 
         // 카운트 대상이면 조회 이력을 기록/갱신하고 벌크 UPDATE로 원자적 증가(race condition 방지)
         // 게스트(currentUserId == null)는 조회수 미집계 — PostView.user_id가 NOT NULL이라 익명 이력 저장 불가.
-        boolean counted = currentUserId != null && registerViewIfCountable(post, currentUserId);
+        // 숨김 글은 노출이 중단된 상태라 검수/작성자 열람 트래픽으로 조회수가 오르지 않게 제외한다.
+        boolean counted = currentUserId != null && !post.isHidden() && registerViewIfCountable(post, currentUserId);
         if (counted) {
             postRepository.incrementViewCount(postId);
         }
@@ -150,14 +156,12 @@ public class PostService {
             return true;
         }
 
-        User viewer = userRepository.findById(currentUserId)
-                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
-        try {
-            postViewRepository.save(PostView.builder().post(post).user(viewer).viewedAt(now).build());
-            return true;
-        } catch (DataIntegrityViolationException e) {
-            return false; // 동시 최초 조회 경합 — 다른 요청이 집계
+        // INSERT IGNORE가 FK 위반까지 삼키므로 존재 확인 가드를 남긴다(제거 시 조회수가 조용히 누락된다).
+        if (!userRepository.existsById(currentUserId)) {
+            throw new NoSuchElementException("존재하지 않는 유저입니다.");
         }
+        // 멱등 삽입 — 동시 최초 조회 경합이면 0행. 예외가 없으므로 트랜잭션이 오염되지 않는다.
+        return postViewRepository.insertIgnore(post.getId(), currentUserId, now) == 1;
     }
 
     /**
@@ -170,8 +174,12 @@ public class PostService {
         Long authorId = "mine".equals(scope) ? currentUserId : null;
         Long bookmarkerId = "bookmarked".equals(scope) ? currentUserId : null;
         String kw = (keyword != null && !keyword.isBlank()) ? keyword.trim() : null;
-        // [FEATURE:admin-moderation] 관리자만 숨김 글을 목록에 포함(검수/숨김 해제 동선). 일반 유저는 기존대로 제외.
-        boolean includeHidden = role == UserRole.ADMIN;
+        // [FEATURE:admin-moderation] 관리자는 숨김 글을 목록에 포함(검수/숨김 해제 동선).
+        // [FEATURE:hidden-author-visibility] scope=mine이면 결과가 이미 author_id로 한정되므로,
+        // 여기서 숨김을 포함해도 추가로 보이는 건 정의상 "내 글"뿐이다 → 작성자가 자기 숨김 글에 도달할 경로가 생긴다.
+        // ⚠️ 반드시 authorId(null 여부)에서 파생시킬 것. "mine".equals(scope)로 판정하면 비로그인 사용자가
+        //    ?scope=mine을 호출할 때 authorId가 null이라 author 필터가 사라져 전체 숨김 글이 유출된다.
+        boolean includeHidden = role == UserRole.ADMIN || authorId != null;
 
         // [FEATURE:cohort-campus-lounge] 라운지 scope는 현재 유저의 기수/캠퍼스로 한정(서버가 해석 — 프론트는 값 미전달).
         // 온보딩 필수값이라 ACTIVE 유저는 항상 값 보유. 라운지 scope일 때만 유저 로드.
@@ -262,6 +270,22 @@ public class PostService {
             throw new ForbiddenException("본인의 글만 삭제할 수 있습니다.");
         }
 
+        // 관리자가 타인 글을 삭제하는 경우만 감사 기록.
+        if (isAdmin && !isAuthor) {
+            adminAuditService.record(userId, AdminAuditAction.DELETE_POST_AS_ADMIN,
+                    AdminAuditTargetType.POST, postId, "title=" + post.getTitle());
+        }
+        // [FEATURE:hidden-author-visibility] 신고 기록을 지우기 전에 스냅샷으로 보존한다.
+        // 검수 큐·신고 통계가 모두 reports에서 파생되므로, 그냥 지우면 신고당한 사실이 흔적 없이 사라져
+        // 상습 위반자 추적이 불가능해진다(작성자에게 숨김 사실을 알려주는 지금은 더 중요해졌다).
+        List<com.company.domain.post.entity.Report> reports = reportRepository.findByPostId(postId);
+        if (!reports.isEmpty()) {
+            LocalDateTime archivedAt = LocalDateTime.now();
+            reportArchiveRepository.saveAll(reports.stream()
+                    .map(r -> ReportArchive.from(r, post, archivedAt))
+                    .toList());
+        }
+
         // C-NEW-1: Post는 comments만 cascade 삭제하므로, post_id를 FK로 참조하는
         // 자식(신고/좋아요/북마크/조회이력)을 먼저 정리하지 않으면 삭제 시 FK 제약 위반 → 500.
         // 관리자 삭제 대상은 대부분 신고 5건↑ 숨김 글이라, 정리 없이는 항상 실패한다.
@@ -290,6 +314,15 @@ public class PostService {
         if (!isAuthor && !isAdmin) {
             throw new ForbiddenException("본인의 글만 수정할 수 있습니다.");
         }
+        // 관리자가 타인 글을 수정하는 경우만 감사 기록(본인 글 수정은 일반 사용자 행위).
+        if (isAdmin && !isAuthor) {
+            adminAuditService.record(userId, AdminAuditAction.UPDATE_POST_AS_ADMIN,
+                    AdminAuditTargetType.POST, postId, null);
+        }
+        // [FEATURE:hidden-author-visibility] 숨김 글은 수정 불가 — 작성자도 관리자도.
+        // 작성자가 자기 숨김 글을 볼 수 있게 되면서, 신고당한 내용을 무해하게 갈아치우고 관리자가 복원하는
+        // 검수 회피 경로가 열린다. 그걸 막는 것이 이 게이트의 핵심 목적이다.
+        post.assertWritable(role, userId);
 
         // 도메인 메서드로 변경 — @Setter 사용 금지
         post.update(request.getTitle(), request.getContent(), request.getCategory());
@@ -305,12 +338,17 @@ public class PostService {
      * (기존 toggleLike를 대체. like는 ReactionType.LIKE로 흡수.)
      */
     @Transactional
-    public ReactionResponse react(Long userId, Long postId, ReactionType type) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 유저입니다."));
+    public ReactionResponse react(Long userId, Long postId, ReactionType type, UserRole role) {
+        // 네이티브 INSERT로 바뀌어 User 엔티티가 불필요 → 존재 확인만(가드 제거 금지: FK 위반이 조용히 삼켜진다).
+        if (!userRepository.existsById(userId)) {
+            throw new NoSuchElementException("존재하지 않는 유저입니다.");
+        }
 
         Post post = postRepository.findById(postId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 게시글입니다."));
+        // [FEATURE:hidden-author-visibility] 숨김 글에는 반응 불가 — 복원 시 유령 활동이 되살아나고
+        // 인기순·주간 다이제스트 집계에도 섞인다.
+        post.assertWritable(role, userId);
 
         Optional<PostLike> existing = postLikeRepository.findByPostIdAndUserId(postId, userId);
         if (existing.isPresent()) {
@@ -321,14 +359,10 @@ public class PostService {
                 r.changeType(type); // 다른 종류 → 변경(dirty checking)
             }
         } else {
-            try {
-                postLikeRepository.save(PostLike.builder().post(post).user(user).reactionType(type).build());
-                // 내 글이 아닐 때만 반응 알림 생성(신규 반응에 한함)
-                if (!post.getAuthor().getId().equals(userId)) {
-                    notificationService.notifyReaction(post.getAuthor(), postId, post.getTitle());
-                }
-            } catch (DataIntegrityViolationException e) {
-                // 동시 첫 반응 경합 — 유니크 제약으로 1회만
+            // 멱등 삽입 — 경합 시 0행(예외 없음). 실제로 삽입된 경우에만 알림을 보내 중복 알림을 막는다.
+            int inserted = postLikeRepository.insertIgnore(postId, userId, type.name(), LocalDateTime.now());
+            if (inserted == 1 && !post.getAuthor().getId().equals(userId)) {
+                notificationService.notifyReaction(post.getAuthor(), postId, post.getTitle());
             }
         }
         return buildReactions(postId, userId);

@@ -25,6 +25,8 @@ import com.company.domain.user.repository.UserRepository;
 import com.company.global.exception.ForbiddenException;
 
 import org.junit.jupiter.api.BeforeEach;
+import com.company.domain.admin.service.AdminAuditService;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -88,6 +90,9 @@ class PostServiceTest {
 
     @Mock
     private PollService pollService; // [FEATURE:poll]
+
+    @Mock
+    private AdminAuditService adminAuditService; // 관리자 권한 수정/삭제 감사
 
     @InjectMocks
     private PostService postService;
@@ -176,13 +181,15 @@ class PostServiceTest {
         // Arrange — otherUser(ID=2)가 author(ID=1)의 글 최초 조회
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(postViewRepository.findByPostIdAndUserId(10L, 2L)).willReturn(Optional.empty());
-        given(userRepository.findById(2L)).willReturn(Optional.of(otherUser));
+        given(userRepository.existsById(2L)).willReturn(true);
+        // 멱등 INSERT가 1행을 넣었을 때만 조회수를 올린다(동시 최초 조회는 한쪽만 집계).
+        given(postViewRepository.insertIgnore(eq(10L), eq(2L), any(LocalDateTime.class))).willReturn(1);
 
         // Act
         postService.getPost(10L, 2L, UserRole.USER);
 
         // Assert
-        verify(postViewRepository).save(any(PostView.class));
+        verify(postViewRepository).insertIgnore(eq(10L), eq(2L), any(LocalDateTime.class));
         verify(postRepository).incrementViewCount(10L);
     }
 
@@ -363,15 +370,15 @@ class PostServiceTest {
     @Test
     @DisplayName("react: 처음 누르면 해당 종류로 저장 + 글 작성자에게 알림")
     void test_반응_신규() {
-        given(userRepository.findById(2L)).willReturn(Optional.of(otherUser));
+        given(userRepository.existsById(2L)).willReturn(true);
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(postLikeRepository.findByPostIdAndUserId(10L, 2L)).willReturn(Optional.empty());
+        // 멱등 INSERT가 실제로 1행을 넣었을 때만 알림이 나간다(경합 시 중복 알림 방지).
+        given(postLikeRepository.insertIgnore(eq(10L), eq(2L), eq("HELPFUL"), any(LocalDateTime.class))).willReturn(1);
 
-        postService.react(2L, 10L, ReactionType.HELPFUL);
+        postService.react(2L, 10L, ReactionType.HELPFUL, UserRole.USER);
 
-        ArgumentCaptor<PostLike> cap = ArgumentCaptor.forClass(PostLike.class);
-        verify(postLikeRepository).save(cap.capture());
-        assertThat(cap.getValue().getReactionType()).isEqualTo(ReactionType.HELPFUL);
+        verify(postLikeRepository).insertIgnore(eq(10L), eq(2L), eq("HELPFUL"), any(LocalDateTime.class));
         verify(notificationService).notifyReaction(any(), anyLong(), any());
     }
 
@@ -379,29 +386,29 @@ class PostServiceTest {
     @DisplayName("react: 같은 종류를 다시 누르면 취소(delete)")
     void test_반응_취소() {
         PostLike existing = PostLike.builder().post(post).user(otherUser).reactionType(ReactionType.LIKE).build();
-        given(userRepository.findById(2L)).willReturn(Optional.of(otherUser));
+        given(userRepository.existsById(2L)).willReturn(true);
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(postLikeRepository.findByPostIdAndUserId(10L, 2L)).willReturn(Optional.of(existing));
 
-        postService.react(2L, 10L, ReactionType.LIKE);
+        postService.react(2L, 10L, ReactionType.LIKE, UserRole.USER);
 
         verify(postLikeRepository).delete(existing);
-        verify(postLikeRepository, never()).save(any());
+        verify(postLikeRepository, never()).insertIgnore(any(), any(), any(), any());
     }
 
     @Test
     @DisplayName("react: 다른 종류를 누르면 변경(changeType, delete/save 없음)")
     void test_반응_변경() {
         PostLike existing = PostLike.builder().post(post).user(otherUser).reactionType(ReactionType.LIKE).build();
-        given(userRepository.findById(2L)).willReturn(Optional.of(otherUser));
+        given(userRepository.existsById(2L)).willReturn(true);
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(postLikeRepository.findByPostIdAndUserId(10L, 2L)).willReturn(Optional.of(existing));
 
-        postService.react(2L, 10L, ReactionType.INFORMATIVE);
+        postService.react(2L, 10L, ReactionType.INFORMATIVE, UserRole.USER);
 
         assertThat(existing.getReactionType()).isEqualTo(ReactionType.INFORMATIVE);
         verify(postLikeRepository, never()).delete(any());
-        verify(postLikeRepository, never()).save(any());
+        verify(postLikeRepository, never()).insertIgnore(any(), any(), any(), any());
     }
     // [/FEATURE:reactions]
 

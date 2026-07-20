@@ -37,6 +37,8 @@ class AdminServiceTest {
     @Mock private ReportRepository reportRepository;
     @Mock private PostRepository postRepository;
 
+    @Mock private AdminAuditService adminAuditService;
+
     @InjectMocks private AdminService adminService;
 
     private User user;
@@ -74,7 +76,7 @@ class AdminServiceTest {
         post.hide();
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
 
-        adminService.restorePost(10L);
+        adminService.restorePost(99L, 10L);
 
         assertThat(post.isHidden()).isFalse();
         assertThat(post.isReviewed()).isTrue();
@@ -86,7 +88,7 @@ class AdminServiceTest {
     void test_관리자_숨김() {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
 
-        adminService.hidePost(10L);
+        adminService.hidePost(99L, 10L);
 
         assertThat(post.isHidden()).isTrue();
     }
@@ -96,7 +98,7 @@ class AdminServiceTest {
     void test_관리자_숨김_없는글() {
         given(postRepository.findById(99L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> adminService.hidePost(99L))
+        assertThatThrownBy(() -> adminService.hidePost(99L, 99L))
                 .isInstanceOf(NoSuchElementException.class);
     }
     // [/FEATURE:admin-moderation]
@@ -147,11 +149,11 @@ class AdminServiceTest {
     void test_공지_고정_토글() {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
 
-        boolean afterPin = adminService.togglePin(10L); // 미고정 → 고정
+        boolean afterPin = adminService.togglePin(99L, 10L); // 미고정 → 고정
         assertThat(afterPin).isTrue();
         assertThat(post.isPinned()).isTrue();
 
-        boolean afterUnpin = adminService.togglePin(10L); // 고정 → 해제
+        boolean afterUnpin = adminService.togglePin(99L, 10L); // 고정 → 해제
         assertThat(afterUnpin).isFalse();
         assertThat(post.isPinned()).isFalse();
     }

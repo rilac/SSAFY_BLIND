@@ -11,7 +11,8 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
     >
       <div className="flex items-start justify-between mb-3">
         <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
-          {/* [FEATURE:admin-moderation] 숨김 글 배지 — 관리자 목록에만 hidden=true가 내려온다(비관리자 목록엔 숨김 글 부재) */}
+          {/* [FEATURE:admin-moderation] 숨김 글 배지 — 관리자 목록, 그리고 scope=mine일 때 작성자 본인의 글에 내려온다
+              ([FEATURE:hidden-author-visibility]로 작성자가 자기 숨김 글을 목록에서 볼 수 있게 됨) */}
           {post.hidden && (
             <span className="flex items-center gap-1 px-1.5 py-0.5 border border-destructive text-destructive text-[10px] font-bold leading-none">
               <EyeOff size={10} /> 숨김
@@ -56,16 +57,20 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
           {/* [/FEATURE:poll] */}
         </div>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onReport(post.id);
-          }}
-          className="p-1 hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
-          title="신고"
-        >
-          <Flag size={14} className="text-muted-foreground" />
-        </button>
+        {/* [FEATURE:hidden-author-visibility] 숨김 글은 서버가 신고를 400으로 막으므로 버튼을 노출하지 않는다
+            (남겨두면 누를 때마다 "신고 처리에 실패했습니다"만 뜬다) */}
+        {!post.hidden && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onReport(post.id);
+            }}
+            className="p-1 hover:bg-muted transition-colors opacity-0 group-hover:opacity-100"
+            title="신고"
+          >
+            <Flag size={14} className="text-muted-foreground" />
+          </button>
+        )}
       </div>
 
       {/* [FEATURE:unread-new] 이미 연 글(새 글 아님)은 제목을 흐리게 — 읽음 표시 */}
@@ -94,18 +99,21 @@ export default function PostCard({ post, onOpen, onToggleBookmark, onReport }) {
           </span>
         </div>
 
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleBookmark(post.id);
-          }}
-          className={`p-1.5 transition-colors ${
-            post.isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
-          }`}
-          title="스크랩"
-        >
-          <Bookmark size={14} fill={post.isBookmarked ? 'currentColor' : 'none'} />
-        </button>
+        {/* [FEATURE:hidden-author-visibility] 스크랩도 동일 — 숨김 글에는 서버가 400을 준다 */}
+        {!post.hidden && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleBookmark(post.id);
+            }}
+            className={`p-1.5 transition-colors ${
+              post.isBookmarked ? 'text-primary' : 'text-muted-foreground hover:text-foreground'
+            }`}
+            title="스크랩"
+          >
+            <Bookmark size={14} fill={post.isBookmarked ? 'currentColor' : 'none'} />
+          </button>
+        )}
       </div>
     </article>
   );

@@ -64,7 +64,7 @@ class CommentServiceAliasTest {
         given(commentRepository.findAllByPostIdOrderByCreatedAtAsc(10L)).willReturn(ordered);
         given(userRepository.findAllById(any())).willReturn(List.of(op, u2, u3));
 
-        List<CommentResponse> res = commentService.getComments(10L, 999L);
+        List<CommentResponse> res = commentService.getComments(10L, 999L, UserRole.USER);
 
         // 101(u2) → 첫 등장 익명1
         assertThat(res.get(0).getAlias()).isEqualTo("익명1");
@@ -84,7 +84,7 @@ class CommentServiceAliasTest {
     void getComments_없는글_예외() {
         given(postRepository.findById(10L)).willReturn(Optional.empty());
 
-        assertThatThrownBy(() -> commentService.getComments(10L, 1L))
+        assertThatThrownBy(() -> commentService.getComments(10L, 1L, UserRole.USER))
                 .isInstanceOf(NoSuchElementException.class);
     }
 
@@ -102,7 +102,7 @@ class CommentServiceAliasTest {
         given(commentRepository.save(any(Comment.class))).willReturn(saved);
         given(commentRepository.findAllByPostIdOrderByCreatedAtAsc(10L)).willReturn(List.of(saved));
 
-        CommentResponse res = commentService.addComment(1L, 10L, req);
+        CommentResponse res = commentService.addComment(1L, 10L, req, UserRole.USER);
 
         assertThat(res.getAlias()).isEqualTo("글쓴이");
         assertThat(res.isOp()).isTrue();
@@ -125,7 +125,7 @@ class CommentServiceAliasTest {
         given(commentRepository.save(any(Comment.class))).willReturn(saved);
         given(commentRepository.findAllByPostIdOrderByCreatedAtAsc(10L)).willReturn(List.of(saved));
 
-        CommentResponse res = commentService.addComment(2L, 10L, req);
+        CommentResponse res = commentService.addComment(2L, 10L, req, UserRole.USER);
 
         assertThat(res.getAlias()).isEqualTo("익명1");
         assertThat(res.isOp()).isFalse();

@@ -8,6 +8,7 @@ import com.company.domain.poll.repository.PollOptionRepository;
 import com.company.domain.poll.repository.PollVoteRepository;
 import com.company.domain.poll.service.PollService;
 import com.company.domain.post.entity.Bookmark;
+import com.company.domain.admin.service.AdminAuditService;
 import com.company.domain.post.entity.Post;
 import com.company.domain.post.entity.PostCategory;
 import com.company.domain.post.entity.PostLike;
@@ -18,6 +19,7 @@ import com.company.domain.post.repository.BookmarkRepository;
 import com.company.domain.post.repository.PostLikeRepository;
 import com.company.domain.post.repository.PostRepository;
 import com.company.domain.post.repository.PostViewRepository;
+import com.company.domain.post.repository.ReportArchiveRepository;
 import com.company.domain.post.repository.ReportRepository;
 import com.company.domain.user.entity.User;
 import com.company.domain.user.entity.UserRole;
@@ -62,6 +64,7 @@ class PostDeletionIntegrationTest {
     @Autowired private CommentLikeRepository commentLikeRepository; // [FEATURE:comment-likes]
     @Autowired private BookmarkRepository bookmarkRepository;
     @Autowired private ReportRepository reportRepository;
+    @Autowired private ReportArchiveRepository reportArchiveRepository; // 삭제 전 신고 스냅샷
     @Autowired private NotificationRepository notificationRepository;
     @Autowired private PostViewRepository postViewRepository;
     @Autowired private PollOptionRepository pollOptionRepository; // [FEATURE:poll]
@@ -78,8 +81,9 @@ class PostDeletionIntegrationTest {
                 pollOptionRepository, pollVoteRepository, postRepository, userRepository);
         postService = new PostService(
                 postRepository, userRepository, postLikeRepository, commentRepository, commentLikeRepository,
-                bookmarkRepository, reportRepository, notificationRepository, postViewRepository,
-                Mockito.mock(NotificationService.class), pollService);
+                bookmarkRepository, reportRepository, reportArchiveRepository, notificationRepository,
+                postViewRepository, Mockito.mock(NotificationService.class), pollService,
+                Mockito.mock(AdminAuditService.class)); // 감사 기록은 삭제 경로와 무관 → 목
     }
 
     @Test
@@ -118,5 +122,17 @@ class PostDeletionIntegrationTest {
         assertThat(bookmarkRepository.existsByPostIdAndUserId(postId, other.getId())).isFalse();
         assertThat(reportRepository.countByPostId(postId)).isZero();
         assertThat(postViewRepository.findByPostIdAndUserId(postId, other.getId())).isEmpty();
+
+        // 신고 기록은 지워지지 않고 스냅샷으로 남아야 한다 — 글이 사라져도 "누가 신고당했는지"가 보존된다.
+        // (이게 없으면 숨김 글 작성자가 삭제 한 번으로 신고 이력을 세탁할 수 있다.)
+        assertThat(reportArchiveRepository.countByAuthorId(author.getId())).isEqualTo(1);
+        var archived = reportArchiveRepository.findByAuthorIdOrderByArchivedAtDesc(author.getId());
+        assertThat(archived).singleElement().satisfies(a -> {
+            assertThat(a.getPostId()).isEqualTo(postId);
+            assertThat(a.getPostTitle()).isEqualTo("신고된 글");
+            assertThat(a.getReporterId()).isEqualTo(other.getId());
+            assertThat(a.getReason()).isEqualTo(ReportReason.SPAM);
+            assertThat(a.getReportedAt()).isNotNull();
+        });
     }
 }

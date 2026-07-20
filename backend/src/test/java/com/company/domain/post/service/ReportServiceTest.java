@@ -18,10 +18,13 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -51,11 +54,11 @@ class ReportServiceTest {
     void test_신고_저장() {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(false);
-        given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
+        given(userRepository.existsById(1L)).willReturn(true);
 
-        reportService.report(1L, 10L, ReportReason.SPAM, null);
+        reportService.report(1L, 10L, ReportReason.SPAM, null, UserRole.USER);
 
-        verify(reportRepository).save(any(Report.class));
+        verify(reportRepository).insertIgnore(eq(10L), eq(1L), eq("SPAM"), isNull(), any(LocalDateTime.class));
     }
 
     @Test
@@ -64,9 +67,9 @@ class ReportServiceTest {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(true);
 
-        reportService.report(1L, 10L, ReportReason.SPAM, null);
+        reportService.report(1L, 10L, ReportReason.SPAM, null, UserRole.USER);
 
-        verify(reportRepository, never()).save(any());
+        verify(reportRepository, never()).insertIgnore(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -74,10 +77,11 @@ class ReportServiceTest {
     void test_신고_5건_자동숨김() {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(false);
-        given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
+        given(userRepository.existsById(1L)).willReturn(true);
+        given(reportRepository.insertIgnore(any(), any(), any(), any(), any())).willReturn(1);
         given(reportRepository.countByPostId(10L)).willReturn(5L);
 
-        reportService.report(1L, 10L, ReportReason.OFF_TOPIC, null);
+        reportService.report(1L, 10L, ReportReason.OFF_TOPIC, null, UserRole.USER);
 
         assertThat(post.isHidden()).isTrue();
     }
@@ -87,10 +91,11 @@ class ReportServiceTest {
     void test_신고_임계값_미만() {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(false);
-        given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
+        given(userRepository.existsById(1L)).willReturn(true);
+        given(reportRepository.insertIgnore(any(), any(), any(), any(), any())).willReturn(1);
         given(reportRepository.countByPostId(10L)).willReturn(3L);
 
-        reportService.report(1L, 10L, ReportReason.ETC, null);
+        reportService.report(1L, 10L, ReportReason.ETC, null, UserRole.USER);
 
         assertThat(post.isHidden()).isFalse();
     }
@@ -101,13 +106,15 @@ class ReportServiceTest {
     void test_ETC_상세사유_저장() {
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(false);
-        given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
+        given(userRepository.existsById(1L)).willReturn(true);
+        given(reportRepository.insertIgnore(any(), any(), any(), any(), any())).willReturn(1);
 
-        reportService.report(1L, 10L, ReportReason.ETC, "  광고 도배예요  ");
+        reportService.report(1L, 10L, ReportReason.ETC, "  광고 도배예요  ", UserRole.USER);
 
-        var captor = org.mockito.ArgumentCaptor.forClass(Report.class);
-        verify(reportRepository).save(captor.capture());
-        assertThat(captor.getValue().getDetail()).isEqualTo("광고 도배예요");
+        // 상세 사유는 이제 엔티티가 아니라 네이티브 INSERT 파라미터로 전달된다.
+        var captor = org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(reportRepository).insertIgnore(eq(10L), eq(1L), eq("ETC"), captor.capture(), any(LocalDateTime.class));
+        assertThat(captor.getValue()).isEqualTo("광고 도배예요");
     }
 
     @Test
@@ -116,9 +123,10 @@ class ReportServiceTest {
         post.restore(); // 복원 → reviewed=true
         given(postRepository.findById(10L)).willReturn(Optional.of(post));
         given(reportRepository.existsByPostIdAndReporterId(10L, 1L)).willReturn(false);
-        given(userRepository.findById(1L)).willReturn(Optional.of(reporter));
+        given(userRepository.existsById(1L)).willReturn(true);
+        given(reportRepository.insertIgnore(any(), any(), any(), any(), any())).willReturn(1);
 
-        reportService.report(1L, 10L, ReportReason.OFF_TOPIC, null);
+        reportService.report(1L, 10L, ReportReason.OFF_TOPIC, null, UserRole.USER);
 
         // reviewed 글은 임계값 카운트 쿼리 자체를 건너뛰고 숨김되지 않는다
         assertThat(post.isHidden()).isFalse();

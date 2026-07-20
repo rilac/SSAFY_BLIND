@@ -10,6 +10,8 @@ import com.company.domain.user.entity.UserRole;
 import com.company.domain.user.entity.UserStatus;
 import com.company.domain.user.repository.UserRepository;
 
+import com.company.domain.admin.service.AdminAuditService;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -30,6 +32,8 @@ class FeedbackServiceTest {
 
     @Mock private FeedbackRepository feedbackRepository;
     @Mock private UserRepository userRepository;
+
+    @Mock private AdminAuditService adminAuditService;
 
     @InjectMocks private FeedbackService feedbackService;
 
@@ -78,7 +82,7 @@ class FeedbackServiceTest {
         Feedback fb = Feedback.builder().title("제안").content("내용").author(user()).build();
         given(feedbackRepository.findById(1L)).willReturn(Optional.of(fb));
 
-        FeedbackResponse result = feedbackService.updateStatus(1L, FeedbackStatus.RESOLVED);
+        FeedbackResponse result = feedbackService.updateStatus(99L, 1L, FeedbackStatus.RESOLVED);
 
         assertThat(result.getStatus()).isEqualTo(FeedbackStatus.RESOLVED);
         assertThat(fb.getStatus()).isEqualTo(FeedbackStatus.RESOLVED);

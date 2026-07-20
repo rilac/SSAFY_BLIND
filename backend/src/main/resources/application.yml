@@ -20,6 +20,10 @@ app:
   jwt:
     access-ttl: ${APP_JWT_ACCESS_TTL:30m}   # Access Token(JWT) 수명 = Redis at:{phantom} TTL + 쿠키 maxAge
     refresh-ttl: ${APP_JWT_REFRESH_TTL:14d}  # Refresh Token 수명 = Redis rt:{hash} TTL + 쿠키 maxAge
+    # RFC 9700 회전 유예 창 = Redis rt:grace:{hash} TTL. 이 시간 안의 구 RT 재제시는 다중 탭 경합으로
+    # 보고 직전 회전 결과를 재발급하며, 창을 넘긴 재제시만 탈취로 판정해 세션 전체를 폐기한다.
+    # 길게 잡을수록 탈취 탐지가 늦어지므로 인플라이트 요청 수명 수준(초 단위)으로 유지할 것.
+    refresh-grace: ${APP_JWT_REFRESH_GRACE:20s}
   # (Refresh Token은 Redis TTL로 자연 만료 → 별도 정리 스케줄러 없음)
   # [FEATURE:weekly-digest] 주간 인기글 다이제스트 — 매주 월 09:10 지난 7일 인기글을 전체 ACTIVE 유저에 알림. 단일 인스턴스 전제.
   weekly-digest:

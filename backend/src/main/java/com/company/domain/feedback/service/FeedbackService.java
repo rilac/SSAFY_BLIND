@@ -2,6 +2,9 @@ package com.company.domain.feedback.service;
 
 import com.company.domain.feedback.controller.dto.FeedbackRequest;
 import com.company.domain.feedback.controller.dto.FeedbackResponse;
+import com.company.domain.admin.entity.AdminAuditAction;
+import com.company.domain.admin.entity.AdminAuditTargetType;
+import com.company.domain.admin.service.AdminAuditService;
 import com.company.domain.feedback.entity.Feedback;
 import com.company.domain.feedback.entity.FeedbackStatus;
 import com.company.domain.feedback.repository.FeedbackRepository;
@@ -22,6 +25,7 @@ import java.util.stream.Collectors;
 public class FeedbackService {
 
     private final FeedbackRepository feedbackRepository;
+    private final AdminAuditService adminAuditService;
     private final UserRepository userRepository;
 
     @Transactional
@@ -48,10 +52,12 @@ public class FeedbackService {
 
     // 관리자 처리 — 상태를 변경하고 갱신된 건의를 반환(처리/수용안함 시 기본 목록에서 제외됨).
     @Transactional
-    public FeedbackResponse updateStatus(Long id, FeedbackStatus status) {
+    public FeedbackResponse updateStatus(Long actorId, Long id, FeedbackStatus status) {
         Feedback feedback = feedbackRepository.findById(id)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 건의입니다."));
         feedback.changeStatus(status);
+        adminAuditService.record(actorId, AdminAuditAction.UPDATE_FEEDBACK_STATUS,
+                AdminAuditTargetType.FEEDBACK, id, "status=" + status);
         return FeedbackResponse.of(feedback);
     }
 }
