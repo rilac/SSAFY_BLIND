@@ -299,3 +299,15 @@ cd backend && ./gradlew test
 **남은 과제**: 테스트 폭 확대(컨트롤러 슬라이스 @WebMvcTest·인가 케이스·프론트엔드 테스트), §6 백로그(모더레이션 강화[관리자 강제 숨김·감사 로그·소프트 삭제]·북마크 폴더·실시간 알림·MM DM 연동 등). 실 MySQL 기동 시 수기 DDL(V4~V6)의 `validate` 통과 최종 확인 권장.
 
 진행 현황은 **[WORKLOG.md](./WORKLOG.md)**, 기능 확장 롤백 인덱스는 **[FEATURES.md](./FEATURES.md)**, 심각도별 이슈/로드맵은 **[MoreDevelopments.md](./MoreDevelopments.md)** · **[MoreDevelopments_V2.md](./MoreDevelopments_V2.md)**에 정리되어 있습니다.
+
+---
+
+## 배포
+
+`main` 브랜치에 push하면 GitHub Actions가 자동으로 빌드·테스트·배포합니다 (`.github/workflows/deploy.yml`).
+
+1. **빌드** — 백엔드 `./gradlew clean build`(테스트 포함), 프론트엔드 `npm run build`
+2. **배포** — EC2로 jar/dist 전송 후 교체. 프론트는 스테이징 디렉터리에 풀고 통째로 교체해 무중단에 가깝게 동작합니다.
+3. **검증** — `/actuator/health`를 최대 90초간 폴링. 실패하면 직전 jar와 dist로 자동 롤백하고 워크플로를 실패 처리합니다.
+
+Pull Request에서는 빌드·테스트만 수행하고 배포하지 않습니다. 수동 재배포는 Actions 탭의 `Run workflow` 버튼으로 가능합니다.
