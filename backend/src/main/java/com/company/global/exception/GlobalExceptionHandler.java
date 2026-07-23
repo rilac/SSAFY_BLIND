@@ -1,5 +1,7 @@
 package com.company.global.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -15,6 +17,8 @@ import java.util.stream.Collectors;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<Map<String, String>> handleInvalidCredentials(InvalidCredentialsException e) {
@@ -74,6 +78,7 @@ public class GlobalExceptionHandler {
     // 팬텀 토큰 저장소(Redis)/DB 접근 장애 → 503(fail-closed). Redis가 죽으면 로그인/재발급도 half-open 없이 실패.
     @ExceptionHandler(DataAccessException.class)
     public ResponseEntity<Map<String, String>> handleDataAccess(DataAccessException e) {
+        log.error("데이터 접근 장애로 503 응답", e);
         return ResponseEntity
                 .status(HttpStatus.SERVICE_UNAVAILABLE)
                 .body(Map.of("message", "일시적으로 서비스에 연결할 수 없습니다. 잠시 후 다시 시도해주세요."));
@@ -91,6 +96,9 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, String>> handleGeneral(Exception e) {
+        // 스택트레이스 없이 500만 반환하면 운영 장애의 원인을 로그로 추적할 수 없다
+        // (2026-07 LazyInitializationException 장애가 어느 로그에도 남지 않았다). 반드시 남길 것.
+        log.error("미분류 예외로 500 응답", e);
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(Map.of("message", "서버 오류가 발생했습니다."));

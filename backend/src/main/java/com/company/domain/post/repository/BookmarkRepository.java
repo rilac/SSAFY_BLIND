@@ -39,8 +39,12 @@ public interface BookmarkRepository extends JpaRepository<Bookmark, Long> {
      *
      * <p>⚠️ INSERT IGNORE는 유니크 위반뿐 아니라 FK·NOT NULL 위반까지 경고로 강등해 조용히 0행이 된다.
      * 호출부의 존재 확인 가드를 제거하지 말 것(제거하면 무증상 데이터 유실이 된다).
+     *
+     * <p>⚠️ clearAutomatically를 켜지 말 것 — 삽입 행은 사전 존재 확인 때문에 영속성 컨텍스트에 있을 수
+     * 없어 비울 것이 없고, 켜면 호출부가 들고 있던 엔티티가 전부 detach된다(2026-07 운영 장애: 타인 글
+     * 첫 조회마다 author 프록시 LazyInitializationException → 500, 신고 자동 숨김 dirty checking 유실).
      */
-    @Modifying(clearAutomatically = true)
+    @Modifying
     @Query(value = "INSERT IGNORE INTO bookmarks (post_id, user_id, created_at) VALUES (:postId, :userId, :createdAt)",
             nativeQuery = true)
     int insertIgnore(@Param("postId") Long postId, @Param("userId") Long userId,
